@@ -4,4 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ply-engine = "1.1"
+ply-engine = { git = "https://github.com/TheRedDeveloper/ply-engine.git", rev = "52be132" }
+strum = { version = "0.28.0", features = ["derive"] }
