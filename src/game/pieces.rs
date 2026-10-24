@@ -184,3 +184,22 @@ impl Occupation {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub enum Colors {
+    Blue,
+    Green,
+    Red,
+    Yellow,
+}
+
+impl Colors {
+    pub fn to_rgb(&self) -> u32 {
+        match self {
+            Colors::Blue => 0x0000FF,
+            Colors::Green => 0x00FF00,
+            Colors::Red => 0xFF0000,
+            Colors::Yellow => 0xFFFF00,
+        }
+    }
+}

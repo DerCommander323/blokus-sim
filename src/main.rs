@@ -28,12 +28,21 @@ fn window_conf() -> macroquad::conf::Conf {
     }
 }
 
+pub struct UiState {
+    selected_piece: Option<usize>,
+    current_color: pieces::Colors,
+}
+
 #[macroquad::main(window_conf)]
 async fn main() {
     static DEFAULT_FONT: FontAsset = font!("assets/fonts/inter.ttf");
     let mut ply = Ply::new(&DEFAULT_FONT).await;
 
     let mut simulator = Simulator::new();
+    let mut ui_state = UiState {
+        selected_piece: None,
+        current_color: pieces::Colors::Blue,
+    };
 
     loop {
         clear_background(BLACK);
@@ -50,9 +59,10 @@ async fn main() {
             .height(grow!())
             .layout(|l| l.direction(LayoutDirection::LeftToRight))
             .children(|ui| {
-                render_pieces(ui, &mut simulator);
+                draw_pieces(ui, &mut simulator, &mut ui_state);
+                draw_controls(ui, &mut simulator, &mut ui_state);
 
-                render_board(ui, &mut simulator);
+                draw_board(ui, &mut simulator);
             });
 
         ui.show().await;
@@ -61,52 +71,104 @@ async fn main() {
     }
 }
 
-pub fn render_pieces(ui: &mut Ui, _simulator: &mut Simulator) {
+pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiState) {
     ui.element()
-        .width(fixed!(380.))
+        .width(fixed!(200.))
         .height(percent!(1.0))
         .overflow(|o| o.scroll_y())
         .layout(|l| l.align(CenterX, CenterY).direction(TopToBottom).gap(4))
         .children(|ui| {
-            ui.text("Blokus", |t| t.font_size(32).color(0xFFFFFF));
+            ui.text("Select piece:", |t| t.font_size(24).color(0xFFFFFF));
 
-            for piece in pieces::Pieces::iter() {
+            for (index, piece) in pieces::Pieces::iter().enumerate() {
                 let shape = pieces::get_occupation(&piece);
 
-                ui.text(&piece.to_string(), |t| t.font_size(16).color(0xFFFFFF));
-
-                let width_to_height = shape.width as f32 / shape.height as f32;
-
                 ui.element()
-                    .width(fixed!(80. * width_to_height))
-                    .height(fixed!(80.))
+                    .layout(|l| l.align(CenterX, CenterY).direction(TopToBottom).padding(1))
+                    .border(|b| {
+                        if ui_state
+                            .selected_piece
+                            .is_some_and(|selected| index == selected)
+                        {
+                            b.all(4).color(0xFFFFFF)
+                        } else {
+                            b
+                        }
+                    })
+                    .corner_radius(4.)
                     .children(|ui| {
-                        draw_grid(
-                            ui,
-                            shape.width as usize,
-                            shape.height as usize,
-                            |x, y, ui| {
-                                // dbg!(piece.to_string(), x, y);
-                                let index = y + x * shape.width as usize;
-                                if index >= shape.map.len() {
-                                    return;
-                                }
+                        if ui.just_pressed() {
+                            if ui_state.selected_piece == Some(index) {
+                                ui_state.selected_piece = None;
+                            } else {
+                                ui_state.selected_piece = Some(index);
+                            }
+                        }
 
-                                let color = if shape.map[index] { 0xFFFFFF } else { 0x222222 };
+                        ui.text(&piece.to_string(), |t| t.font_size(16).color(0xFFFFFF));
 
-                                ui.element()
-                                    .width(grow!())
-                                    .height(grow!())
-                                    .background_color(color)
-                                    .empty();
-                            },
-                        );
+                        let width_to_height = shape.width as f32 / shape.height as f32;
+
+                        ui.element()
+                            .width(fixed!(80. * width_to_height))
+                            .height(fixed!(80.))
+                            .children(|ui| {
+                                draw_grid(
+                                    ui,
+                                    shape.width as usize,
+                                    shape.height as usize,
+                                    |x, y, ui| {
+                                        // dbg!(piece.to_string(), x, y);
+                                        let index = y + x * shape.width as usize;
+                                        if index >= shape.map.len() {
+                                            return;
+                                        }
+
+                                        let color = if shape.map[index] {
+                                            ui_state.current_color.to_rgb()
+                                        } else {
+                                            0x222222
+                                        };
+
+                                        ui.element()
+                                            .width(grow!())
+                                            .height(grow!())
+                                            .background_color(color)
+                                            .empty();
+                                    },
+                                );
+                            });
                     });
             }
         });
 }
 
-pub fn render_board(ui: &mut Ui, simulator: &mut Simulator) {
+pub fn draw_controls(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiState) {
+    ui.element()
+        .width(fixed!(150.))
+        .height(percent!(1.0))
+        .overflow(|o| o.scroll_y())
+        .layout(|l| l.align(CenterX, CenterY).direction(TopToBottom).gap(4))
+        .children(|ui| {
+            button(ui, fixed!(100.), fixed!(50.), |ui| {
+                ui.text("Change Color", |t| {
+                    t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
+                });
+                if ui.just_pressed() {
+                    let next_color = match ui_state.current_color {
+                        pieces::Colors::Blue => pieces::Colors::Green,
+                        pieces::Colors::Green => pieces::Colors::Red,
+                        pieces::Colors::Red => pieces::Colors::Yellow,
+                        pieces::Colors::Yellow => pieces::Colors::Blue,
+                    };
+
+                    ui_state.current_color = next_color;
+                }
+            });
+        });
+}
+
+pub fn draw_board(ui: &mut Ui, simulator: &mut Simulator) {
     ui.element()
         .id("board container")
         .height(grow!())
@@ -185,4 +247,15 @@ fn draw_grid(
                     });
             }
         });
+}
+
+fn button(ui: &mut Ui, width: Sizing, height: Sizing, mut children: impl FnMut(&mut Ui)) {
+    ui.element()
+        .width(width)
+        .height(height)
+        .background_color(0x333334)
+        .layout(|l| l.align(CenterX, CenterY))
+        .border(|b| b.all(2).color(0x424242))
+        .corner_radius(4.)
+        .children(|ui| children(ui));
 }
