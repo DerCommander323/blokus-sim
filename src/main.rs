@@ -6,7 +6,11 @@ use ply_engine::{
 };
 use strum::IntoEnumIterator;
 
-use crate::game::{board::Square, pieces, simulator::Simulator};
+use crate::game::{
+    board::Square,
+    pieces::{self, Occupation, PIECE_OCCUPATIONS},
+    simulator::Simulator,
+};
 
 fn window_conf() -> macroquad::conf::Conf {
     macroquad::conf::Conf {
@@ -31,6 +35,7 @@ fn window_conf() -> macroquad::conf::Conf {
 pub struct UiState {
     selected_piece: Option<usize>,
     current_color: pieces::Colors,
+    all_occupations: Vec<Occupation>,
 }
 
 #[macroquad::main(window_conf)]
@@ -42,6 +47,7 @@ async fn main() {
     let mut ui_state = UiState {
         selected_piece: None,
         current_color: pieces::Colors::Blue,
+        all_occupations: PIECE_OCCUPATIONS.clone(),
     };
 
     loop {
@@ -62,7 +68,7 @@ async fn main() {
                 draw_pieces(ui, &mut simulator, &mut ui_state);
                 draw_controls(ui, &mut simulator, &mut ui_state);
 
-                draw_board(ui, &mut simulator);
+                draw_board(ui, &mut simulator, &mut ui_state);
             });
 
         ui.show().await;
@@ -81,7 +87,7 @@ pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiSta
             ui.text("Select piece:", |t| t.font_size(24).color(0xFFFFFF));
 
             for (index, piece) in pieces::Pieces::iter().enumerate() {
-                let shape = pieces::get_occupation(&piece);
+                let shape = &ui_state.all_occupations[index];
 
                 ui.element()
                     .layout(|l| l.align(CenterX, CenterY).direction(TopToBottom).padding(1))
@@ -109,9 +115,15 @@ pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiSta
 
                         let width_to_height = shape.width as f32 / shape.height as f32;
 
+                        let size_mult = if 80. * width_to_height > 160. {
+                            0.25
+                        } else {
+                            1.
+                        };
+
                         ui.element()
-                            .width(fixed!(80. * width_to_height))
-                            .height(fixed!(80.))
+                            .width(fixed!(80. * width_to_height * size_mult))
+                            .height(fixed!(80. * size_mult))
                             .children(|ui| {
                                 draw_grid(
                                     ui,
@@ -119,12 +131,8 @@ pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiSta
                                     shape.height as usize,
                                     |x, y, ui| {
                                         // dbg!(piece.to_string(), x, y);
-                                        let index = y + x * shape.width as usize;
-                                        if index >= shape.map.len() {
-                                            return;
-                                        }
 
-                                        let color = if shape.map[index] {
+                                        let color = if shape.occupied_at_pos(x as u8, y as u8) {
                                             ui_state.current_color.to_rgb()
                                         } else {
                                             0x222222
@@ -148,7 +156,7 @@ pub fn draw_controls(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiS
         .width(fixed!(150.))
         .height(percent!(1.0))
         .overflow(|o| o.scroll_y())
-        .layout(|l| l.align(CenterX, CenterY).direction(TopToBottom).gap(4))
+        .layout(|l| l.align(CenterX, CenterY).direction(TopToBottom).gap(16))
         .children(|ui| {
             button(ui, fixed!(100.), fixed!(50.), |ui| {
                 ui.text("Change Color", |t| {
@@ -165,10 +173,30 @@ pub fn draw_controls(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiS
                     ui_state.current_color = next_color;
                 }
             });
+            button(ui, fixed!(100.), fixed!(50.), |ui| {
+                ui.text("Rotate right", |t| {
+                    t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
+                });
+                if ui.just_pressed() {
+                    for piece in &mut ui_state.all_occupations {
+                        piece.rotate_right();
+                    }
+                }
+            });
+            button(ui, fixed!(100.), fixed!(50.), |ui| {
+                ui.text("Mirror vertically", |t| {
+                    t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
+                });
+                if ui.just_pressed() {
+                    for piece in &mut ui_state.all_occupations {
+                        piece.mirror_vertically();
+                    }
+                }
+            });
         });
 }
 
-pub fn draw_board(ui: &mut Ui, simulator: &mut Simulator) {
+pub fn draw_board(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiState) {
     ui.element()
         .id("board container")
         .height(grow!())
@@ -182,12 +210,17 @@ pub fn draw_board(ui: &mut Ui, simulator: &mut Simulator) {
                 .color((0, 0, 0, 0))
         })
         .children(|ui| {
-            let board = simulator.board_mut();
             draw_grid(ui, 20, 20, |x, y, ui| {
-                let square = board.get_squares()[x][y].clone();
+                let square = simulator.board().get_squares()[x][y].clone();
 
                 let color = match square {
-                    Square::Empty => 0xFFFFFF,
+                    Square::Empty => match simulator.overlay_board_mut().get_squares()[x][y] {
+                        Square::Empty => 0xFFFFFF,
+                        Square::Blue => 0x7777FF,
+                        Square::Green => 0x77FF77,
+                        Square::Red => 0xFF7777,
+                        Square::Yellow => 0xFFFF77,
+                    },
                     Square::Blue => 0x0000FF,
                     Square::Green => 0x00FF00,
                     Square::Red => 0xFF0000,
@@ -195,16 +228,27 @@ pub fn draw_board(ui: &mut Ui, simulator: &mut Simulator) {
                 };
 
                 if ui.just_pressed() {
-                    // Rotate through possible colors
-                    let next_color = match square {
-                        Square::Empty => Square::Blue,
-                        Square::Blue => Square::Green,
-                        Square::Green => Square::Red,
-                        Square::Red => Square::Yellow,
-                        Square::Yellow => Square::Empty,
-                    };
+                    if let Some(piece) = ui_state.selected_piece {
+                        simulator.board_mut().place_piece(
+                            &ui_state.all_occupations[piece],
+                            ui_state.current_color.clone(),
+                            x,
+                            y,
+                        );
+                    }
+                }
 
-                    board.set_square(x, y, next_color);
+                let overlay = simulator.overlay_board_mut();
+                if ui.hovered() {
+                    if let Some(piece) = ui_state.selected_piece {
+                        overlay.reset();
+                        overlay.place_piece(
+                            &ui_state.all_occupations[piece],
+                            ui_state.current_color.clone(),
+                            x,
+                            y,
+                        );
+                    }
                 }
 
                 ui.element()
@@ -229,14 +273,14 @@ fn draw_grid(
         .height(grow!())
         .layout(|l| l.direction(LayoutDirection::TopToBottom).gap(1))
         .children(|ui| {
-            for x in 0..height {
+            for y in 0..height {
                 ui.element()
                     .height(Sizing::Percent(1. / height as f32))
                     .width(grow!())
                     // .background_color(0xCCCCCC)
                     .layout(|l| l.direction(LayoutDirection::LeftToRight).gap(1))
                     .children(|ui| {
-                        for y in 0..width {
+                        for x in 0..width {
                             ui.element()
                                 .width(Sizing::Percent(1. / width as f32))
                                 .height(grow!())

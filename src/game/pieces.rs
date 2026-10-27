@@ -1,7 +1,11 @@
-use crate::game::pieces::Pieces::*;
+use std::sync::LazyLock;
+
+use strum::IntoEnumIterator;
+
+use crate::game::{board, pieces::Pieces::*};
 
 /// See https://www.spiele4us.de/wp-content/uploads/2022/10/blokus-n002700060.pdf
-#[derive(Debug, strum::Display, strum::EnumIter)]
+#[derive(Debug, Clone, strum::Display, strum::EnumIter, strum::FromRepr)]
 pub enum Pieces {
     /// 1 Square
     Single1 = 1,
@@ -35,8 +39,20 @@ pub enum Pieces {
     Plus5 = 21,
 }
 
+pub const PIECE_OCCUPATIONS: LazyLock<Vec<Occupation>> = LazyLock::new(|| {
+    Pieces::iter()
+        .map(|p| calculate_piece_occupation(&p))
+        .collect::<Vec<Occupation>>()
+});
+
+impl Pieces {
+    pub fn get_id(&self) -> usize {
+        self.clone() as usize
+    }
+}
+
 #[rustfmt::skip]
-pub fn get_occupation(piece: &Pieces) -> Occupation {
+pub fn calculate_piece_occupation(piece: &Pieces) -> Occupation {
     match piece {
         Single1 => Occupation::new_1x1(true),
         Bar2 => Occupation::new(1, 2, &[
@@ -143,10 +159,12 @@ pub fn get_occupation(piece: &Pieces) -> Occupation {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Occupation {
     pub width: u8,
     pub height: u8,
     pub map: Vec<bool>,
+    pub rotation: Rotation,
 }
 
 impl Occupation {
@@ -157,7 +175,107 @@ impl Occupation {
             width,
             height,
             map: occupied.to_vec(),
+            rotation: Rotation::Normal,
         }
+    }
+
+    pub fn rotate_right(&mut self) {
+        let count = self.map.len();
+        let original_map = self.map.clone();
+
+        let mut walking_index = 0;
+        for dx in 0..self.width as usize {
+            for dy in 0..self.height as usize {
+                let temp = count - ((dy + 1) * self.width as usize);
+                let original_index = temp + dx;
+
+                self.map[walking_index] = original_map[original_index];
+
+                walking_index += 1;
+            }
+        }
+
+        let old_h = self.height;
+        self.height = self.width;
+        self.width = old_h;
+        self.rotation = match self.rotation {
+            Rotation::Normal => Rotation::Cw90,
+            Rotation::Cw90 => Rotation::Cw180,
+            Rotation::Cw180 => Rotation::Cw270,
+            Rotation::Cw270 => Rotation::Normal,
+        }
+
+        // Rotating the indices:
+        // 0 1 2 3
+        // 4 5 6 7
+
+        // 4 0
+        // 5 1
+        // 6 2
+        // 7 3
+        // = 40516273
+
+        // 7 6 5 4
+        // 3 2 1 0
+        // = 76543210
+
+        // 0 1 2
+        // 3 4 5
+        // 6 7 8
+
+        // = 630741852
+
+        // 0 1 2 3
+        // 4 5 6 7
+        // 8 9 10 11
+
+        // = 8 4 0 9 5 1 10 6 2 11 7 3
+    }
+
+    pub fn mirror_vertically(&mut self) {
+        let original_map = self.map.clone();
+
+        let mut walking_index = 0;
+        for dy in 0..self.height as usize {
+            for dx in 0..self.width as usize {
+                let original_index = (self.width as usize * (dy + 1)) - dx - 1;
+
+                self.map[walking_index] = original_map[original_index];
+
+                walking_index += 1;
+            }
+        }
+
+        // 0 1 2
+        // 3 4 5
+        // 6 7 8
+        // = 210 543 876
+
+        // 0 1 2 3
+        // 4 5 6 7
+        // = 3210 7654
+    }
+
+    /// Same effect as horizontal mirroring but implemented the lazy way with one vertical mirror and 2 rotates
+    pub fn mirror_horizontally_fake(&mut self) {
+        self.mirror_vertically();
+        self.rotate_right();
+        self.rotate_right();
+    }
+
+    pub fn map_index(&self, x: u8, y: u8) -> u8 {
+        let index = x + y * self.width;
+
+        debug_assert!((index as usize) < self.map.len());
+
+        index
+    }
+
+    pub fn occupied_at_pos(&self, x: u8, y: u8) -> bool {
+        debug_assert!(x <= self.width);
+        debug_assert!(y <= self.height);
+
+        self.map[self.map_index(x, y) as usize]
     }
 
     pub fn new_1x1(occupied: bool) -> Self {
@@ -165,6 +283,7 @@ impl Occupation {
             width: 1,
             height: 1,
             map: vec![occupied],
+            rotation: Rotation::Normal,
         }
     }
 
@@ -173,6 +292,7 @@ impl Occupation {
             width: 2,
             height: 2,
             map: occupied.to_vec(),
+            rotation: Rotation::Normal,
         }
     }
 
@@ -181,8 +301,17 @@ impl Occupation {
             width: 3,
             height: 3,
             map: occupied.to_vec(),
+            rotation: Rotation::Normal,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum Rotation {
+    Normal,
+    Cw90,
+    Cw180,
+    Cw270,
 }
 
 #[derive(Debug, Clone)]
@@ -200,6 +329,15 @@ impl Colors {
             Colors::Green => 0x00FF00,
             Colors::Red => 0xFF0000,
             Colors::Yellow => 0xFFFF00,
+        }
+    }
+
+    pub fn to_square(&self) -> board::Square {
+        match self {
+            Colors::Blue => board::Square::Blue,
+            Colors::Green => board::Square::Green,
+            Colors::Red => board::Square::Red,
+            Colors::Yellow => board::Square::Yellow,
         }
     }
 }
