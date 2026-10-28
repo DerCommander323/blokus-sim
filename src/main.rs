@@ -8,7 +8,7 @@ use strum::IntoEnumIterator;
 
 use crate::game::{
     board::Square,
-    pieces::{self, Occupation, PIECE_OCCUPATIONS},
+    pieces::{self, Rotation, PIECE_SHAPES, SHAPES_BY_ROTATION},
     simulator::Simulator,
 };
 
@@ -34,8 +34,9 @@ fn window_conf() -> macroquad::conf::Conf {
 
 pub struct UiState {
     selected_piece: Option<usize>,
+    display_special_shapes: bool,
     current_color: pieces::Colors,
-    all_occupations: Vec<Occupation>,
+    current_rotation: Rotation,
 }
 
 #[macroquad::main(window_conf)]
@@ -46,9 +47,12 @@ async fn main() {
     let mut simulator = Simulator::new();
     let mut ui_state = UiState {
         selected_piece: None,
+        display_special_shapes: false,
         current_color: pieces::Colors::Blue,
-        all_occupations: PIECE_OCCUPATIONS.clone(),
+        current_rotation: Rotation::Normal,
     };
+
+    simulator.place_open_corner_overlay();
 
     loop {
         clear_background(BLACK);
@@ -87,7 +91,15 @@ pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiSta
             ui.text("Select piece:", |t| t.font_size(24).color(0xFFFFFF));
 
             for (index, piece) in pieces::Pieces::iter().enumerate() {
-                let shape = &ui_state.all_occupations[index];
+                let shape = &PIECE_SHAPES[index];
+                let special_shape =
+                    &SHAPES_BY_ROTATION.get(&ui_state.current_rotation).unwrap()[index];
+
+                let (width, height) = if ui_state.display_special_shapes {
+                    (special_shape.width, special_shape.height)
+                } else {
+                    (shape.width, shape.height)
+                };
 
                 ui.element()
                     .layout(|l| l.align(CenterX, CenterY).direction(TopToBottom).padding(1))
@@ -113,7 +125,7 @@ pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiSta
 
                         ui.text(&piece.to_string(), |t| t.font_size(16).color(0xFFFFFF));
 
-                        let width_to_height = shape.width as f32 / shape.height as f32;
+                        let width_to_height = width as f32 / height as f32;
 
                         let size_mult = if 80. * width_to_height > 160. {
                             0.25
@@ -125,26 +137,30 @@ pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiSta
                             .width(fixed!(80. * width_to_height * size_mult))
                             .height(fixed!(80. * size_mult))
                             .children(|ui| {
-                                draw_grid(
-                                    ui,
-                                    shape.width as usize,
-                                    shape.height as usize,
-                                    |x, y, ui| {
-                                        // dbg!(piece.to_string(), x, y);
+                                draw_grid(ui, width as usize, height as usize, |x, y, ui| {
+                                    // dbg!(piece.to_string(), x, y);
 
-                                        let color = if shape.occupied_at_pos(x as u8, y as u8) {
+                                    let color = if ui_state.display_special_shapes {
+                                        match special_shape.value_at_pos(x as u8, y as u8) {
+                                            pieces::SpecialShapePart::Blank______ => 0x222222,
+                                            pieces::SpecialShapePart::Normal_____ => 0xFFFFFF,
+                                            pieces::SpecialShapePart::InnerCorner => 0x00FF00,
+                                            pieces::SpecialShapePart::OuterCorner => 0xFF0000,
+                                        }
+                                    } else {
+                                        if shape.occupied_at_pos(x as u8, y as u8) {
                                             ui_state.current_color.to_rgb()
                                         } else {
                                             0x222222
-                                        };
+                                        }
+                                    };
 
-                                        ui.element()
-                                            .width(grow!())
-                                            .height(grow!())
-                                            .background_color(color)
-                                            .empty();
-                                    },
-                                );
+                                    ui.element()
+                                        .width(grow!())
+                                        .height(grow!())
+                                        .background_color(color)
+                                        .empty();
+                                });
                             });
                     });
             }
@@ -174,13 +190,19 @@ pub fn draw_controls(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiS
                 }
             });
             button(ui, fixed!(100.), fixed!(50.), |ui| {
+                ui.text("Special shape display", |t| {
+                    t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
+                });
+                if ui.just_pressed() {
+                    ui_state.display_special_shapes = !ui_state.display_special_shapes;
+                }
+            });
+            button(ui, fixed!(100.), fixed!(50.), |ui| {
                 ui.text("Rotate right", |t| {
                     t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
                 });
                 if ui.just_pressed() {
-                    for piece in &mut ui_state.all_occupations {
-                        piece.rotate_right();
-                    }
+                    ui_state.current_rotation = ui_state.current_rotation.rotated_right();
                 }
             });
             button(ui, fixed!(100.), fixed!(50.), |ui| {
@@ -188,9 +210,15 @@ pub fn draw_controls(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiS
                     t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
                 });
                 if ui.just_pressed() {
-                    for piece in &mut ui_state.all_occupations {
-                        piece.mirror_vertically();
-                    }
+                    ui_state.current_rotation = ui_state.current_rotation.mirrored_vertically();
+                }
+            });
+            button(ui, fixed!(100.), fixed!(50.), |ui| {
+                ui.text("Step Simulator", |t| {
+                    t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
+                });
+                if ui.just_pressed() {
+                    _simulator.step();
                 }
             });
         });
@@ -230,8 +258,8 @@ pub fn draw_board(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiState
                 if ui.just_pressed() {
                     if let Some(piece) = ui_state.selected_piece {
                         simulator.board_mut().place_piece(
-                            &ui_state.all_occupations[piece],
-                            ui_state.current_color.clone(),
+                            &PIECE_SHAPES[piece],
+                            &ui_state.current_color,
                             x,
                             y,
                         );
@@ -242,12 +270,8 @@ pub fn draw_board(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiState
                 if ui.hovered() {
                     if let Some(piece) = ui_state.selected_piece {
                         overlay.reset();
-                        overlay.place_piece(
-                            &ui_state.all_occupations[piece],
-                            ui_state.current_color.clone(),
-                            x,
-                            y,
-                        );
+                        overlay.place_piece(&PIECE_SHAPES[piece], &ui_state.current_color, x, y);
+                        simulator.place_open_corner_overlay();
                     }
                 }
 

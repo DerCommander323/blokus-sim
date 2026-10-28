@@ -1,4 +1,4 @@
-use crate::game::pieces::{Colors, Occupation};
+use crate::game::pieces::{Colors, Shape};
 
 pub struct GameBoard {
     squares: [[Square; 20]; 20],
@@ -9,9 +9,9 @@ pub enum Square {
     #[default]
     Empty,
     Blue,
-    Green,
-    Red,
     Yellow,
+    Red,
+    Green,
 }
 
 impl GameBoard {
@@ -33,7 +33,7 @@ impl GameBoard {
         self.squares[x][y] = square;
     }
 
-    pub fn place_piece(&mut self, occupation: &Occupation, color: Colors, x: usize, y: usize) {
+    pub fn place_piece(&mut self, occupation: &Shape, color: &Colors, x: usize, y: usize) {
         let square = color.to_square();
 
         for dx in 0..occupation.width {

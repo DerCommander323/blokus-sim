@@ -1,8 +1,9 @@
 [package]
 name = "blokus-sim"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
+enum_dispatch = "0.3.13"
 ply-engine = { git = "https://github.com/TheRedDeveloper/ply-engine.git", rev = "52be132" }
 strum = { version = "0.28.0", features = ["derive"] }
