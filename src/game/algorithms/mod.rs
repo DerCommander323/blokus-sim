@@ -16,9 +16,10 @@ pub enum Algorithms {
 pub trait Algorithm {
     fn get_next_piece(
         &mut self,
+        available_pieces: &mut Vec<Pieces>,
         placed_pieces: &Vec<Pieces>,
-        open_corners: &mut Vec<(usize, usize)>,
+        open_corners: &mut Vec<(i32, i32)>,
         color: &Colors,
         board: &mut GameBoard,
-    ) -> PlacedPiece;
+    ) -> Option<PlacedPiece>;
 }

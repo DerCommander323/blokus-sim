@@ -271,15 +271,15 @@ pub fn calculate_piece_shape(piece: &Pieces) -> Shape {
 
 #[derive(Debug, Clone)]
 pub struct Shape {
-    pub width: u8,
-    pub height: u8,
+    pub width: i32,
+    pub height: i32,
     pub map: Vec<bool>,
     pub rotation: Rotation,
 }
 
 impl Shape {
-    pub fn new(width: u8, height: u8, occupied: &[bool]) -> Shape {
-        assert_eq!(occupied.len() as u8, width * height);
+    pub fn new(width: i32, height: i32, occupied: &[bool]) -> Shape {
+        assert_eq!(occupied.len() as i32, width * height);
 
         Self {
             width,
@@ -372,7 +372,7 @@ impl Shape {
         self.rotate_right();
     }
 
-    pub fn map_index(&self, x: u8, y: u8) -> u8 {
+    pub fn map_index(&self, x: i32, y: i32) -> i32 {
         let index = x + y * self.width;
 
         debug_assert!((index as usize) < self.map.len());
@@ -380,7 +380,7 @@ impl Shape {
         index
     }
 
-    pub fn occupied_at_pos(&self, x: u8, y: u8) -> bool {
+    pub fn occupied_at_pos(&self, x: i32, y: i32) -> bool {
         debug_assert!(x <= self.width);
         debug_assert!(y <= self.height);
 
@@ -457,7 +457,7 @@ impl Rotation {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, strum::Display)]
 pub enum Colors {
     Blue,
     Yellow,
@@ -488,18 +488,19 @@ impl Colors {
 pub struct PlacedPiece {
     pub piece: Pieces,
     pub shape: SpecialShape,
-    pub x: isize,
-    pub y: isize,
+    pub used_corner: (i32, i32),
+    pub x: i32,
+    pub y: i32,
 }
 
 #[derive(Debug, Clone)]
 pub struct SpecialShape {
-    pub width: u8,
-    pub height: u8,
+    pub width: i32,
+    pub height: i32,
     pub map: Vec<SpecialShapePart>,
     pub rotation: Rotation,
-    pub inner_corners: Vec<(u8, u8)>,
-    pub outer_corners: Vec<(u8, u8)>,
+    pub inner_corners: Vec<(i32, i32)>,
+    pub outer_corners: Vec<(i32, i32)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -517,8 +518,8 @@ pub enum SpecialShapePart {
 }
 
 impl SpecialShape {
-    pub fn new(width: u8, height: u8, occupied: &[SpecialShapePart]) -> Self {
-        assert_eq!(occupied.len() as u8, width * height);
+    pub fn new(width: i32, height: i32, occupied: &[SpecialShapePart]) -> Self {
+        assert_eq!(occupied.len() as i32, width * height);
 
         let mut result = Self {
             width,
@@ -613,21 +614,21 @@ impl SpecialShape {
         self.rotate_right();
     }
 
-    pub fn occupied_at_pos(&self, x: u8, y: u8) -> bool {
+    pub fn occupied_at_pos(&self, x: i32, y: i32) -> bool {
         match self.value_at_pos(x, y) {
             SpecialShapePart::InnerCorner | SpecialShapePart::Normal_____ => true,
             _ => false,
         }
     }
 
-    pub fn value_at_pos(&self, x: u8, y: u8) -> SpecialShapePart {
+    pub fn value_at_pos(&self, x: i32, y: i32) -> SpecialShapePart {
         debug_assert!(x <= self.width);
         debug_assert!(y <= self.height);
 
         self.map[self.map_index(x, y) as usize]
     }
 
-    pub fn map_index(&self, x: u8, y: u8) -> u8 {
+    pub fn map_index(&self, x: i32, y: i32) -> i32 {
         let index = x + y * self.width;
 
         debug_assert!((index as usize) < self.map.len());

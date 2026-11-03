@@ -8,7 +8,7 @@ use strum::IntoEnumIterator;
 
 use crate::game::{
     board::Square,
-    pieces::{self, PIECE_SHAPES, PIECE_SPECIAL_SHAPES, Rotation, SHAPES_BY_ROTATION, Shape},
+    pieces::{self, PIECE_SHAPES, Rotation, SHAPES_BY_ROTATION, Shape},
     simulator::Simulator,
 };
 
@@ -38,6 +38,7 @@ pub struct UiState {
     current_color: pieces::Colors,
     current_rotation: Rotation,
     current_shapes: Vec<Shape>,
+    overlay_enabled: bool,
 }
 
 #[macroquad::main(window_conf)]
@@ -52,6 +53,7 @@ async fn main() {
         current_color: pieces::Colors::Blue,
         current_rotation: Rotation::Normal,
         current_shapes: PIECE_SHAPES.clone(),
+        overlay_enabled: true,
     };
 
     simulator.place_open_corner_overlay();
@@ -139,11 +141,11 @@ pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiSta
                             .width(fixed!(80. * width_to_height * size_mult))
                             .height(fixed!(80. * size_mult))
                             .children(|ui| {
-                                draw_grid(ui, width as usize, height as usize, |x, y, ui| {
+                                draw_grid(ui, width, height, |x, y, ui| {
                                     // dbg!(piece.to_string(), x, y);
 
                                     let color = if ui_state.display_special_shapes {
-                                        match special_shape.value_at_pos(x as u8, y as u8) {
+                                        match special_shape.value_at_pos(x, y) {
                                             pieces::SpecialShapePart::Blank______ => 0x222222,
                                             pieces::SpecialShapePart::Normal_____ => 0x00AA11,
                                             pieces::SpecialShapePart::Adjacent___ => 0xFFFF00,
@@ -151,7 +153,7 @@ pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiSta
                                             pieces::SpecialShapePart::OuterCorner => 0xFF0000,
                                         }
                                     } else {
-                                        if shape.occupied_at_pos(x as u8, y as u8) {
+                                        if shape.occupied_at_pos(x, y) {
                                             ui_state.current_color.to_rgb()
                                         } else {
                                             0x222222
@@ -183,10 +185,10 @@ pub fn draw_controls(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiSt
                 });
                 if ui.just_pressed() {
                     let next_color = match ui_state.current_color {
-                        pieces::Colors::Blue => pieces::Colors::Green,
-                        pieces::Colors::Green => pieces::Colors::Red,
-                        pieces::Colors::Red => pieces::Colors::Yellow,
-                        pieces::Colors::Yellow => pieces::Colors::Blue,
+                        pieces::Colors::Blue => pieces::Colors::Yellow,
+                        pieces::Colors::Yellow => pieces::Colors::Red,
+                        pieces::Colors::Red => pieces::Colors::Green,
+                        pieces::Colors::Green => pieces::Colors::Blue,
                     };
 
                     ui_state.current_color = next_color;
@@ -223,11 +225,21 @@ pub fn draw_controls(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiSt
                 }
             });
             button(ui, fixed!(100.), fixed!(50.), |ui| {
+                ui.text("Toggle overlay", |t| {
+                    t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
+                });
+                if ui.just_pressed() {
+                    ui_state.overlay_enabled = !ui_state.overlay_enabled;
+                }
+            });
+            button(ui, fixed!(100.), fixed!(50.), |ui| {
                 ui.text("Step Simulator", |t| {
                     t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
                 });
                 if ui.just_pressed() {
                     simulator.step();
+                    simulator.overlay_board_mut().reset();
+                    simulator.place_open_corner_overlay();
                 }
             });
         });
@@ -248,16 +260,22 @@ pub fn draw_board(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiState
         })
         .children(|ui| {
             draw_grid(ui, 20, 20, |x, y, ui| {
-                let square = simulator.board().get_squares()[x][y].clone();
+                let square = simulator.board().get_square(x, y).clone();
 
                 let color = match square {
-                    Square::Empty => match simulator.overlay_board_mut().get_squares()[x][y] {
-                        Square::Empty => 0xFFFFFF,
-                        Square::Blue => 0x7777FF,
-                        Square::Green => 0x77FF77,
-                        Square::Red => 0xFF7777,
-                        Square::Yellow => 0xFFFF77,
-                    },
+                    Square::Empty => {
+                        if ui_state.overlay_enabled {
+                            match simulator.overlay_board_mut().get_square(x, y) {
+                                Square::Empty => 0xFFFFFF,
+                                Square::Blue => 0xDDDDFF,
+                                Square::Green => 0xCCFFCC,
+                                Square::Red => 0xFFDDDD,
+                                Square::Yellow => 0xFFFFCC,
+                            }
+                        } else {
+                            0xFFFFFF
+                        }
+                    }
                     Square::Blue => 0x0000FF,
                     Square::Green => 0x00FF00,
                     Square::Red => 0xFF0000,
@@ -280,8 +298,8 @@ pub fn draw_board(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiState
                         let can_place = simulator.board().can_place_piece(
                             &SHAPES_BY_ROTATION.get(&ui_state.current_rotation).unwrap()[piece],
                             &ui_state.current_color,
-                            x as isize,
-                            y as isize,
+                            x,
+                            y,
                         );
 
                         let overlay = simulator.overlay_board_mut();
@@ -308,12 +326,7 @@ pub fn draw_board(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiState
         });
 }
 
-fn draw_grid(
-    ui: &mut Ui,
-    width: usize,
-    height: usize,
-    mut square_cb: impl FnMut(usize, usize, &mut Ui),
-) {
+fn draw_grid(ui: &mut Ui, width: i32, height: i32, mut square_cb: impl FnMut(i32, i32, &mut Ui)) {
     ui.element()
         // .background_color(0x222222)
         .width(grow!())
@@ -349,4 +362,21 @@ fn button(ui: &mut Ui, width: Sizing, height: Sizing, mut children: impl FnMut(&
         .border(|b| b.all(2).color(0x424242))
         .corner_radius(4.)
         .children(|ui| children(ui));
+}
+
+pub fn bounds_check(x: i32, y: i32) -> bool {
+    !(x < 0 || x >= 20 || y < 0 || y >= 20)
+}
+
+pub fn hard_bounds_check(x: i32, y: i32) -> bool {
+    if x < 0 || x >= 20 {
+        eprintln!("x={x} out of range 0..20!");
+        return false;
+    }
+    if y < 0 || y >= 20 {
+        eprintln!("y={y} out of range 0..20!");
+        return false;
+    }
+
+    true
 }

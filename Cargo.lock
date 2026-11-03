@@ -343,6 +343,7 @@ name = "blokus-sim"
 version = "0.1.0"
 dependencies = [
  "enum_dispatch",
+ "fastrand",
  "ply-engine",
  "strum",
 ]

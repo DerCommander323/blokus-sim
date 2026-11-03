@@ -1,9 +1,12 @@
 use strum::IntoEnumIterator;
 
-use crate::game::{
-    algorithms::{Algorithm, Algorithms, random::RandomAlgorithm},
-    board::GameBoard,
-    pieces::{Colors, Pieces, PlacedPiece, Shape},
+use crate::{
+    bounds_check,
+    game::{
+        algorithms::{Algorithm, Algorithms, random::RandomAlgorithm},
+        board::GameBoard,
+        pieces::{Colors, Pieces, PlacedPiece, Shape},
+    },
 };
 
 pub struct Simulator {
@@ -60,7 +63,7 @@ impl Simulator {
         }
     }
 
-    pub fn all_open_corners(&self) -> [(Colors, Vec<(usize, usize)>); 4] {
+    pub fn all_open_corners(&self) -> [(Colors, Vec<(i32, i32)>); 4] {
         [
             (Colors::Blue, self.player_blue.get_open_corners().clone()),
             (
@@ -87,33 +90,61 @@ impl Simulator {
 
 pub struct Player {
     pub color: Colors,
+    pub available_pieces: Vec<Pieces>,
     pub placed_pieces: Vec<Pieces>,
-    pub open_corners: Vec<(usize, usize)>,
+    pub open_corners: Vec<(i32, i32)>,
     pub algorithm: Algorithms,
 }
 
 impl Player {
-    pub fn new(color: Colors, starting_position: (usize, usize)) -> Self {
+    pub fn new(color: Colors, starting_position: (i32, i32)) -> Self {
         Self {
             color,
+            available_pieces: Pieces::iter().collect(),
             placed_pieces: Vec::new(),
             open_corners: vec![starting_position],
             algorithm: RandomAlgorithm::new(),
         }
     }
 
-    pub fn get_open_corners(&self) -> &Vec<(usize, usize)> {
+    pub fn get_open_corners(&self) -> &Vec<(i32, i32)> {
         &self.open_corners
     }
 
     pub fn place_next_piece(&mut self, board: &mut GameBoard) {
-        let PlacedPiece { piece, shape, x, y } = self.algorithm.get_next_piece(
+        let Some(PlacedPiece {
+            piece,
+            shape,
+            used_corner,
+            x,
+            y,
+        }) = self.algorithm.get_next_piece(
+            &mut self.available_pieces,
             &self.placed_pieces,
             &mut self.open_corners,
             &self.color,
             board,
-        );
+        )
+        else {
+            return;
+        };
+
+        println!("Placing {}", piece.to_string());
         board.place_special_piece(&shape, &self.color, x, y);
+        self.open_corners
+            .extract_if(.., |crnr| *crnr == used_corner)
+            .for_each(drop);
+        for new_corner in shape.outer_corners {
+            let nx = new_corner.0 + x;
+            let ny = new_corner.1 + y;
+
+            if bounds_check(nx, ny) {
+                self.open_corners.push((nx, ny));
+            }
+        }
+        self.available_pieces
+            .extract_if(.., |pc| *pc == piece)
+            .for_each(drop);
         self.placed_pieces.push(piece);
     }
 }

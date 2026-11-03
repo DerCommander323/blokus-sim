@@ -1,4 +1,8 @@
-use crate::game::pieces::{Colors, Shape, SpecialShape, SpecialShapePart};
+use crate::{
+    bounds_check,
+    game::pieces::{Colors, Shape, SpecialShape, SpecialShapePart},
+    hard_bounds_check,
+};
 
 pub struct GameBoard {
     squares: [[Square; 20]; 20],
@@ -29,97 +33,83 @@ impl GameBoard {
         &self.squares
     }
 
-    pub fn get_square(&self, x: usize, y: usize) -> &Square {
-        &self.get_squares()[x][y]
+    pub fn get_square(&self, x: i32, y: i32) -> &Square {
+        hard_bounds_check(x, y);
+        &self.get_squares()[x as usize][y as usize]
     }
 
-    pub fn set_square(&mut self, x: usize, y: usize, square: Square) {
-        self.squares[x][y] = square;
+    pub fn set_square(&mut self, x: i32, y: i32, square: Square) {
+        hard_bounds_check(x, y);
+        self.squares[x as usize][y as usize] = square;
     }
 
-    pub fn can_place_piece(
-        &self,
-        shape: &SpecialShape,
-        color: &Colors,
-        x: isize,
-        y: isize,
-    ) -> bool {
+    pub fn can_place_piece(&self, shape: &SpecialShape, color: &Colors, x: i32, y: i32) -> bool {
         // 22 because the SpecialShapes are extended by 2 in both directions
-        if x + shape.width as isize > 22 || y + shape.height as isize > 22 {
+        if x <= -2 || x + shape.width > 22 || y <= -2 || y + shape.height > 22 {
             return false;
         }
 
-        dbg!(x, y);
+        let mut ret = false;
 
         for dx in 0..shape.width {
             for dy in 0..shape.height {
-                let Some(x) = (dx as isize + x).checked_sub(1) else {
-                    continue;
-                };
-                let Some(y) = (dy as isize + y).checked_sub(1) else {
-                    continue;
-                };
-
-                if x <= 0 || x >= 20 || y <= 0 || y >= 20 {
-                    continue;
-                }
+                let board_x = dx + x;
+                let board_y = dy + y;
 
                 match shape.value_at_pos(dx, dy) {
                     SpecialShapePart::Adjacent___ => {
-                        if self.get_square(x as usize, y as usize) == &color.to_square() {
-                            return false;
+                        if bounds_check(board_x, board_y) {
+                            if self.get_square(board_x, board_y) == &color.to_square() {
+                                return false;
+                            }
                         }
                     }
                     SpecialShapePart::InnerCorner | SpecialShapePart::Normal_____ => {
-                        if self.get_square(x as usize, y as usize) != &Square::Empty {
+                        if bounds_check(board_x, board_y) {
+                            if self.get_square(board_x, board_y) != &Square::Empty {
+                                return false;
+                            }
+                        } else {
                             return false;
                         }
                     }
-                    _ => {}
+                    _ => {
+                        ret = true;
+                    }
                 }
             }
         }
 
-        true
+        ret
     }
 
-    pub fn place_piece(&mut self, shape: &Shape, color: &Colors, x: usize, y: usize) {
+    pub fn place_piece(&mut self, shape: &Shape, color: &Colors, x: i32, y: i32) {
         let square = color.to_square();
 
         for dx in 0..shape.width {
             for dy in 0..shape.height {
                 if shape.occupied_at_pos(dx, dy) {
-                    if x + dx as usize >= 20 || y + dy as usize >= 20 {
+                    if x + dx >= 20 || y + dy >= 20 {
                         continue;
                     }
 
-                    self.set_square(x + dx as usize, y + dy as usize, square.clone());
+                    self.set_square(x + dx, y + dy, square.clone());
                 }
             }
         }
     }
 
-    pub fn place_special_piece(
-        &mut self,
-        shape: &SpecialShape,
-        color: &Colors,
-        x: isize,
-        y: isize,
-    ) {
+    pub fn place_special_piece(&mut self, shape: &SpecialShape, color: &Colors, x: i32, y: i32) {
         let square = color.to_square();
 
         for dx in 0..shape.width {
             for dy in 0..shape.height {
                 if shape.occupied_at_pos(dx, dy) {
-                    if x + dx as isize >= 20 || y + dy as isize >= 20 {
+                    if x + dx >= 20 || y + dy >= 20 {
                         continue;
                     }
 
-                    self.set_square(
-                        (x + dx as isize) as usize,
-                        (y + dy as isize) as usize,
-                        square.clone(),
-                    );
+                    self.set_square(x + dx, y + dy, square.clone());
                 }
             }
         }

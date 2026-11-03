@@ -4,8 +4,7 @@ use strum::IntoEnumIterator;
 use crate::game::{
     algorithms::{Algorithm, Algorithms},
     board::GameBoard,
-    pieces::{Colors, Pieces, PlacedPiece, SHAPES_BY_ROTATION, SPECIAL_SHAPES_BY_PIECE},
-    simulator::Player,
+    pieces::{Colors, Pieces, PlacedPiece, SPECIAL_SHAPES_BY_PIECE},
 };
 
 #[derive(Debug)]
@@ -24,40 +23,39 @@ impl RandomAlgorithm {
 impl Algorithm for RandomAlgorithm {
     fn get_next_piece(
         &mut self,
+        available_pieces: &mut Vec<Pieces>,
         placed_pieces: &Vec<Pieces>,
-        open_corners: &mut Vec<(usize, usize)>,
+        open_corners: &mut Vec<(i32, i32)>,
         color: &Colors,
         board: &mut GameBoard,
-    ) -> PlacedPiece {
+    ) -> Option<PlacedPiece> {
         // Select a random piece, a random open corner and a random rotation for the piece and try until the piece fits
 
-        self.available_pieces.shuffle();
-        open_corners.shuffle();
+        fastrand::shuffle(available_pieces);
+        fastrand::shuffle(open_corners);
 
-        let mut pieces = self.available_pieces.clone();
-        let mut corners = open_corners.clone();
-
-        for piece in &pieces {
-            for outer_corner in &corners {
+        for piece in available_pieces {
+            for outer_corner in &*open_corners {
                 for shape in SPECIAL_SHAPES_BY_PIECE.get(piece).unwrap() {
                     for inner_corner in &shape.inner_corners {
-                        let x = outer_corner.0 as isize - inner_corner.0 as isize;
-                        let y = outer_corner.1 as isize - inner_corner.1 as isize;
+                        let x = outer_corner.0 - inner_corner.0;
+                        let y = outer_corner.1 - inner_corner.1;
 
-                        dbg!(x, y);
-
-                        if board.can_place_piece(&shape, color, x - 1, y - 1) {
-                            return PlacedPiece {
+                        if board.can_place_piece(&shape, color, x, y) {
+                            return Some(PlacedPiece {
                                 piece: piece.clone(),
                                 shape: shape.clone(),
+                                used_corner: *outer_corner,
                                 x: x,
                                 y: y,
-                            };
+                            });
                         }
                     }
                 }
             }
         }
-        panic!("out of pieces")
+
+        println!("{color} is out of pieces",);
+        None
     }
 }
