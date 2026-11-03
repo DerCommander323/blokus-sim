@@ -5,7 +5,7 @@ use strum::IntoEnumIterator;
 use crate::game::{board, pieces::Pieces::*};
 
 /// See https://www.spiele4us.de/wp-content/uploads/2022/10/blokus-n002700060.pdf
-#[derive(Debug, Clone, strum::Display, strum::EnumIter, strum::FromRepr)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, strum::Display, strum::EnumIter, strum::FromRepr)]
 pub enum Pieces {
     /// 1 Square
     Single1 = 1,
@@ -50,6 +50,33 @@ pub static PIECE_SPECIAL_SHAPES: LazyLock<Vec<SpecialShape>> = LazyLock::new(|| 
         .map(|p| calculate_special_piece_shape(&p))
         .collect::<Vec<SpecialShape>>()
 });
+
+pub static SPECIAL_SHAPES_BY_PIECE: LazyLock<HashMap<Pieces, Vec<SpecialShape>>> =
+    LazyLock::new(|| {
+        let mut map = HashMap::new();
+        let mut total_variants = 0;
+
+        for piece in Pieces::iter() {
+            let mut vec: Vec<SpecialShape> = Vec::new();
+
+            'rotation: for rotation in piece.get_all_rotations() {
+                for existing in &vec {
+                    if existing.is_same(&rotation) {
+                        continue 'rotation;
+                    }
+                }
+                vec.push(rotation);
+            }
+
+            println!("Found {} variations of {}", vec.len(), piece.to_string());
+            total_variants += vec.len();
+            map.insert(piece, vec);
+        }
+
+        eprintln!("Got a total of {total_variants} variants");
+
+        map
+    });
 
 pub static SHAPES_BY_ROTATION: LazyLock<HashMap<Rotation, Vec<SpecialShape>>> =
     LazyLock::new(|| {
@@ -106,6 +133,31 @@ pub static SHAPES_BY_ROTATION: LazyLock<HashMap<Rotation, Vec<SpecialShape>>> =
 impl Pieces {
     pub fn get_id(&self) -> usize {
         self.clone() as usize
+    }
+
+    pub fn get_all_rotations(&self) -> [SpecialShape; 8] {
+        let mut shape = PIECE_SPECIAL_SHAPES[self.get_id() - 1].clone();
+
+        let base = shape.clone();
+        shape.rotate_right();
+        let r1 = shape.clone();
+        shape.rotate_right();
+        let r2 = shape.clone();
+        shape.rotate_right();
+        let r3 = shape.clone();
+
+        shape = base.clone();
+        shape.mirror_vertically();
+
+        let mirrored = shape.clone();
+        shape.rotate_right();
+        let mr1 = shape.clone();
+        shape.rotate_right();
+        let mr2 = shape.clone();
+        shape.rotate_right();
+        let mr3 = shape.clone();
+
+        [base, r1, r2, r3, mirrored, mr1, mr2, mr3]
     }
 }
 
@@ -435,9 +487,9 @@ impl Colors {
 
 pub struct PlacedPiece {
     pub piece: Pieces,
-    pub shape: Shape,
-    pub x: usize,
-    pub y: usize,
+    pub shape: SpecialShape,
+    pub x: isize,
+    pub y: isize,
 }
 
 #[derive(Debug, Clone)]
@@ -450,12 +502,14 @@ pub struct SpecialShape {
     pub outer_corners: Vec<(u8, u8)>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SpecialShapePart {
     /// Blank space
     Blank______,
     /// Occupied square with no possible corner connections
     Normal_____,
+    /// Blank square touching a non-blank square directly
+    Adjacent___,
     /// A square of the piece that is in a corner
     InnerCorner,
     /// A square outside the piece touching the corner of an InnerCorner
@@ -478,6 +532,15 @@ impl SpecialShape {
         result.build_lists();
 
         result
+    }
+
+    pub fn is_same(&self, other: &Self) -> bool {
+        if self.width != other.width || self.height != other.height {
+            return false;
+        }
+
+        // If the individual squares are the same, the piece is functionally identical
+        self.map == other.map
     }
 
     fn build_lists(&mut self) {
@@ -550,6 +613,13 @@ impl SpecialShape {
         self.rotate_right();
     }
 
+    pub fn occupied_at_pos(&self, x: u8, y: u8) -> bool {
+        match self.value_at_pos(x, y) {
+            SpecialShapePart::InnerCorner | SpecialShapePart::Normal_____ => true,
+            _ => false,
+        }
+    }
+
     pub fn value_at_pos(&self, x: u8, y: u8) -> SpecialShapePart {
         debug_assert!(x <= self.width);
         debug_assert!(y <= self.height);
@@ -584,150 +654,150 @@ pub fn calculate_special_piece_shape(piece: &Pieces) -> SpecialShape {
 
     match piece {
         Single1 => SpecialShape::new_3x3([
-            OuterCorner, Blank______, OuterCorner,
-            Blank______, InnerCorner, Blank______,
-            OuterCorner, Blank______, OuterCorner
+            OuterCorner, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, OuterCorner
         ]),
         Bar2 => SpecialShape::new(3, 4, &[
-            OuterCorner, Blank______, OuterCorner,
-            Blank______, InnerCorner, Blank______,
-            Blank______, InnerCorner, Blank______,
-            OuterCorner, Blank______, OuterCorner
+            OuterCorner, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, Adjacent___,
+            Adjacent___, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, OuterCorner
         ]),
         Bar3 => SpecialShape::new(3, 5, &[
-            OuterCorner, Blank______, OuterCorner,
-            Blank______, InnerCorner, Blank______,
-            Blank______, Normal_____, Blank______,
-            Blank______, InnerCorner, Blank______,
-            OuterCorner, Blank______, OuterCorner
+            OuterCorner, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, Adjacent___,
+            Adjacent___, Normal_____, Adjacent___,
+            Adjacent___, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, OuterCorner
         ]),
         Corner3 => SpecialShape::new_4x4([
-            OuterCorner, Blank______, OuterCorner, Blank______,
-            Blank______, InnerCorner, Blank______, OuterCorner,
-            Blank______, InnerCorner, InnerCorner, Blank______,
-            OuterCorner, Blank______, Blank______, OuterCorner
+            OuterCorner, Adjacent___, OuterCorner, Blank______,
+            Adjacent___, InnerCorner, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, Adjacent___, OuterCorner
         ]),
         Bar4 => SpecialShape::new(3, 6, &[
-            OuterCorner, Blank______, OuterCorner,
-            Blank______, InnerCorner, Blank______,
-            Blank______, Normal_____, Blank______,
-            Blank______, Normal_____, Blank______,
-            Blank______, InnerCorner, Blank______,
-            OuterCorner, Blank______, OuterCorner
+            OuterCorner, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, Adjacent___,
+            Adjacent___, Normal_____, Adjacent___,
+            Adjacent___, Normal_____, Adjacent___,
+            Adjacent___, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, OuterCorner
         ]),
         L4 => SpecialShape::new(4, 5, &[
-            OuterCorner, Blank______, Blank______, OuterCorner,
-            Blank______, InnerCorner, InnerCorner, Blank______,
-            Blank______, Normal_____, Blank______, OuterCorner,
-            Blank______, InnerCorner, Blank______, Blank______,
-            OuterCorner, Blank______, OuterCorner, Blank______,
+            OuterCorner, Adjacent___, OuterCorner, Blank______,
+            Adjacent___, InnerCorner, Adjacent___, Blank______,
+            Adjacent___, Normal_____, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, Adjacent___, OuterCorner,
         ]),
         T4 => SpecialShape::new(5, 4, &[
-            OuterCorner, Blank______, Blank______, Blank______, OuterCorner,
-            Blank______, InnerCorner, Normal_____, InnerCorner, Blank______,
-            OuterCorner, Blank______, InnerCorner, Blank______, OuterCorner,
-            Blank______, OuterCorner, Blank______, OuterCorner, Blank______
+            OuterCorner, Adjacent___, Adjacent___, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, Normal_____, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, InnerCorner, Adjacent___, OuterCorner,
+            Blank______, OuterCorner, Adjacent___, OuterCorner, Blank______
         ]),
         Square4 => SpecialShape::new_4x4([
-            OuterCorner, Blank______, Blank______, OuterCorner,
-            Blank______, InnerCorner, InnerCorner, Blank______,
-            Blank______, InnerCorner, InnerCorner, Blank______,
-            OuterCorner, Blank______, Blank______, OuterCorner
+            OuterCorner, Adjacent___, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, InnerCorner, Adjacent___,
+            Adjacent___, InnerCorner, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, Adjacent___, OuterCorner
         ]),
         Z4 => SpecialShape::new(5, 4, &[
-            OuterCorner, Blank______, Blank______, OuterCorner, Blank______,
-            Blank______, InnerCorner, InnerCorner, Blank______, OuterCorner,
-            OuterCorner, Blank______, InnerCorner, InnerCorner, Blank______,
-            Blank______, OuterCorner, Blank______, Blank______, OuterCorner
+            OuterCorner, Adjacent___, Adjacent___, OuterCorner, Blank______,
+            Adjacent___, InnerCorner, InnerCorner, Adjacent___, OuterCorner,
+            OuterCorner, Adjacent___, InnerCorner, InnerCorner, Adjacent___,
+            Blank______, OuterCorner, Adjacent___, Adjacent___, OuterCorner
         ]),
         Bar5 => SpecialShape::new(3, 7, &[
-            OuterCorner, Blank______, OuterCorner,
-            Blank______, InnerCorner, Blank______,
-            Blank______, Normal_____, Blank______,
-            Blank______, Normal_____, Blank______,
-            Blank______, Normal_____, Blank______,
-            Blank______, InnerCorner, Blank______,
-            OuterCorner, Blank______, OuterCorner
+            OuterCorner, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, Adjacent___,
+            Adjacent___, Normal_____, Adjacent___,
+            Adjacent___, Normal_____, Adjacent___,
+            Adjacent___, Normal_____, Adjacent___,
+            Adjacent___, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, OuterCorner
         ]),
         L5 => SpecialShape::new(4, 6, &[
-            OuterCorner, Blank______, Blank______, OuterCorner,
-            Blank______, InnerCorner, InnerCorner, Blank______,
-            Blank______, Normal_____, Blank______, Blank______,
-            Blank______, Normal_____, Blank______, Blank______,
-            Blank______, InnerCorner, Blank______, Blank______,
-            OuterCorner, Blank______, OuterCorner, Blank______
+            OuterCorner, Adjacent___, OuterCorner, Blank______,
+            Adjacent___, InnerCorner, Adjacent___, Blank______,
+            Adjacent___, Normal_____, Adjacent___, Blank______,
+            Adjacent___, Normal_____, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, Adjacent___, OuterCorner,
         ]),
         Z5 => SpecialShape::new(4, 6, &[
-            Blank______, OuterCorner, Blank______, OuterCorner,
-            Blank______, Blank______, InnerCorner, Blank______,
-            OuterCorner, Blank______, Normal_____, Blank______,
-            Blank______, InnerCorner, InnerCorner, Blank______,
-            Blank______, InnerCorner, Blank______, OuterCorner,
-            OuterCorner, Blank______, OuterCorner, Blank______
+            Blank______, OuterCorner, Adjacent___, OuterCorner,
+            Blank______, Adjacent___, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, Normal_____, Adjacent___,
+            Adjacent___, InnerCorner, InnerCorner, Adjacent___,
+            Adjacent___, InnerCorner, Adjacent___, OuterCorner,
+            OuterCorner, Adjacent___, OuterCorner, Blank______
         ]),
         P5 => SpecialShape::new(4, 5, &[
-            Blank______, OuterCorner, Blank______, OuterCorner,
-            OuterCorner, Blank______, InnerCorner, Blank______,
-            Blank______, InnerCorner, Normal_____, Blank______,
-            Blank______, InnerCorner, InnerCorner, Blank______,
-            OuterCorner, Blank______, Blank______, OuterCorner
+            Blank______, OuterCorner, Adjacent___, OuterCorner,
+            OuterCorner, Adjacent___, InnerCorner, Adjacent___,
+            Adjacent___, InnerCorner, Normal_____, Adjacent___,
+            Adjacent___, InnerCorner, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, Adjacent___, OuterCorner
         ]),
         Bracket5 => SpecialShape::new(4, 5, &[
-            OuterCorner, Blank______, Blank______, OuterCorner,
-            Blank______, InnerCorner, InnerCorner, Blank______,
-            OuterCorner, Blank______, Normal_____, Blank______,
-            Blank______, InnerCorner, InnerCorner, Blank______,
-            OuterCorner, Blank______, Blank______, OuterCorner
+            OuterCorner, Adjacent___, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, Normal_____, Adjacent___,
+            Adjacent___, InnerCorner, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, Adjacent___, OuterCorner
         ]),
         WeirdBar5 => SpecialShape::new(4, 6, &[
-            OuterCorner, Blank______, OuterCorner, Blank______,
-            Blank______, InnerCorner, Blank______, Blank______,
-            Blank______, Normal_____, Blank______, OuterCorner,
-            Blank______, Normal_____, InnerCorner, Blank______,
-            Blank______, InnerCorner, Blank______, OuterCorner,
-            OuterCorner, Blank______, OuterCorner, Blank______,
+            OuterCorner, Adjacent___, OuterCorner, Blank______,
+            Adjacent___, InnerCorner, Adjacent___, Blank______,
+            Adjacent___, Normal_____, Adjacent___, OuterCorner,
+            Adjacent___, Normal_____, InnerCorner, Adjacent___,
+            Adjacent___, InnerCorner, Adjacent___, OuterCorner,
+            OuterCorner, Adjacent___, OuterCorner, Blank______,
         ]),
         T5 => SpecialShape::new_5x5([
-            OuterCorner, Blank______, Blank______, Blank______, OuterCorner,
-            Blank______, InnerCorner, Normal_____, InnerCorner, Blank______,
-            OuterCorner, Blank______, Normal_____, Blank______, OuterCorner,
-            Blank______, Blank______, InnerCorner, Blank______, Blank______,
-            Blank______, OuterCorner, Blank______, OuterCorner, Blank______
+            OuterCorner, Adjacent___, Adjacent___, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, Normal_____, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, Normal_____, Adjacent___, OuterCorner,
+            Blank______, Adjacent___, InnerCorner, Adjacent___, Blank______,
+            Blank______, OuterCorner, Adjacent___, OuterCorner, Blank______
         ]),
         Corner5 => SpecialShape::new_5x5([
-            OuterCorner, Blank______, OuterCorner, Blank______, Blank______,
-            Blank______, InnerCorner, Blank______, Blank______, Blank______,
-            Blank______, Normal_____, Blank______, Blank______, OuterCorner,
-            Blank______, InnerCorner, Normal_____, InnerCorner, Blank______,
-            OuterCorner, Blank______, Blank______, Blank______, OuterCorner
+            OuterCorner, Adjacent___, OuterCorner, Blank______, Blank______,
+            Adjacent___, InnerCorner, Adjacent___, Blank______, Blank______,
+            Adjacent___, Normal_____, Adjacent___, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, Normal_____, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, Adjacent___, Adjacent___, OuterCorner
         ]),
         W5 => SpecialShape::new_5x5([
-            OuterCorner, Blank______, Blank______, OuterCorner, Blank______,
-            Blank______, InnerCorner, InnerCorner, Blank______, OuterCorner,
-            OuterCorner, Blank______, InnerCorner, InnerCorner, Blank______,
-            Blank______, OuterCorner, Blank______, InnerCorner, Blank______,
-            Blank______, Blank______, OuterCorner, Blank______, OuterCorner
+            OuterCorner, Adjacent___, Adjacent___, OuterCorner, Blank______,
+            Adjacent___, InnerCorner, InnerCorner, Adjacent___, OuterCorner,
+            OuterCorner, Adjacent___, InnerCorner, InnerCorner, Adjacent___,
+            Blank______, OuterCorner, Adjacent___, InnerCorner, Adjacent___,
+            Blank______, Blank______, OuterCorner, Adjacent___, OuterCorner
         ]),
         LongS5 => SpecialShape::new_5x5([
-            OuterCorner, Blank______, Blank______, Blank______, Blank______,
-            Blank______, InnerCorner, Blank______, Blank______, OuterCorner,
-            Blank______, InnerCorner, Normal_____, InnerCorner, Blank______,
-            OuterCorner, Blank______, Blank______, InnerCorner, Blank______,
-            Blank______, Blank______, Blank______, Blank______, OuterCorner
+            OuterCorner, Adjacent___, OuterCorner, Blank______, Blank______,
+            Adjacent___, InnerCorner, Adjacent___, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, Normal_____, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, Adjacent___, InnerCorner, Adjacent___,
+            Blank______, Blank______, OuterCorner, Adjacent___, OuterCorner
         ]),
         Thingy5 => SpecialShape::new_5x5([
-            OuterCorner, Blank______, OuterCorner, Blank______, Blank______,
-            Blank______, InnerCorner, Blank______, Blank______, OuterCorner,
-            Blank______, InnerCorner, Normal_____, InnerCorner, Blank______,
-            OuterCorner, Blank______, InnerCorner, Blank______, OuterCorner,
-            Blank______, OuterCorner, Blank______, OuterCorner, Blank______
+            OuterCorner, Adjacent___, OuterCorner, Blank______, Blank______,
+            Adjacent___, InnerCorner, Adjacent___, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, Normal_____, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, InnerCorner, Adjacent___, OuterCorner,
+            Blank______, OuterCorner, Adjacent___, OuterCorner, Blank______
         ]),
         Plus5 => SpecialShape::new_5x5([
-            Blank______, OuterCorner, Blank______, OuterCorner, Blank______,
-            OuterCorner, Blank______, InnerCorner, Blank______, OuterCorner,
-            Blank______, InnerCorner, Normal_____, InnerCorner, Blank______,
-            OuterCorner, Blank______, InnerCorner, Blank______, OuterCorner,
-            Blank______, OuterCorner, Blank______, OuterCorner, Blank______
+            Blank______, OuterCorner, Adjacent___, OuterCorner, Blank______,
+            OuterCorner, Adjacent___, InnerCorner, Adjacent___, OuterCorner,
+            Adjacent___, InnerCorner, Normal_____, InnerCorner, Adjacent___,
+            OuterCorner, Adjacent___, InnerCorner, Adjacent___, OuterCorner,
+            Blank______, OuterCorner, Adjacent___, OuterCorner, Blank______
         ]),
     }
 }

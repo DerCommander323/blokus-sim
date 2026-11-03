@@ -1,6 +1,6 @@
 use crate::game::{
     board::GameBoard,
-    pieces::{Pieces, PlacedPiece, Shape},
+    pieces::{Colors, Pieces, PlacedPiece, Shape},
     simulator::Player,
 };
 
@@ -18,6 +18,7 @@ pub trait Algorithm {
         &mut self,
         placed_pieces: &Vec<Pieces>,
         open_corners: &mut Vec<(usize, usize)>,
+        color: &Colors,
         board: &mut GameBoard,
     ) -> PlacedPiece;
 }

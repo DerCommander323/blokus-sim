@@ -8,7 +8,7 @@ use strum::IntoEnumIterator;
 
 use crate::game::{
     board::Square,
-    pieces::{self, Rotation, PIECE_SHAPES, SHAPES_BY_ROTATION},
+    pieces::{self, PIECE_SHAPES, PIECE_SPECIAL_SHAPES, Rotation, SHAPES_BY_ROTATION, Shape},
     simulator::Simulator,
 };
 
@@ -37,6 +37,7 @@ pub struct UiState {
     display_special_shapes: bool,
     current_color: pieces::Colors,
     current_rotation: Rotation,
+    current_shapes: Vec<Shape>,
 }
 
 #[macroquad::main(window_conf)]
@@ -50,6 +51,7 @@ async fn main() {
         display_special_shapes: false,
         current_color: pieces::Colors::Blue,
         current_rotation: Rotation::Normal,
+        current_shapes: PIECE_SHAPES.clone(),
     };
 
     simulator.place_open_corner_overlay();
@@ -91,7 +93,7 @@ pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiSta
             ui.text("Select piece:", |t| t.font_size(24).color(0xFFFFFF));
 
             for (index, piece) in pieces::Pieces::iter().enumerate() {
-                let shape = &PIECE_SHAPES[index];
+                let shape = &ui_state.current_shapes[index];
                 let special_shape =
                     &SHAPES_BY_ROTATION.get(&ui_state.current_rotation).unwrap()[index];
 
@@ -143,7 +145,8 @@ pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiSta
                                     let color = if ui_state.display_special_shapes {
                                         match special_shape.value_at_pos(x as u8, y as u8) {
                                             pieces::SpecialShapePart::Blank______ => 0x222222,
-                                            pieces::SpecialShapePart::Normal_____ => 0xFFFFFF,
+                                            pieces::SpecialShapePart::Normal_____ => 0x00AA11,
+                                            pieces::SpecialShapePart::Adjacent___ => 0xFFFF00,
                                             pieces::SpecialShapePart::InnerCorner => 0x00FF00,
                                             pieces::SpecialShapePart::OuterCorner => 0xFF0000,
                                         }
@@ -167,7 +170,7 @@ pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiSta
         });
 }
 
-pub fn draw_controls(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiState) {
+pub fn draw_controls(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiState) {
     ui.element()
         .width(fixed!(150.))
         .height(percent!(1.0))
@@ -203,6 +206,9 @@ pub fn draw_controls(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiS
                 });
                 if ui.just_pressed() {
                     ui_state.current_rotation = ui_state.current_rotation.rotated_right();
+                    for shape in &mut ui_state.current_shapes {
+                        shape.rotate_right();
+                    }
                 }
             });
             button(ui, fixed!(100.), fixed!(50.), |ui| {
@@ -211,6 +217,9 @@ pub fn draw_controls(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiS
                 });
                 if ui.just_pressed() {
                     ui_state.current_rotation = ui_state.current_rotation.mirrored_vertically();
+                    for shape in &mut ui_state.current_shapes {
+                        shape.mirror_vertically();
+                    }
                 }
             });
             button(ui, fixed!(100.), fixed!(50.), |ui| {
@@ -218,7 +227,7 @@ pub fn draw_controls(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiS
                     t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
                 });
                 if ui.just_pressed() {
-                    _simulator.step();
+                    simulator.step();
                 }
             });
         });
@@ -258,7 +267,7 @@ pub fn draw_board(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiState
                 if ui.just_pressed() {
                     if let Some(piece) = ui_state.selected_piece {
                         simulator.board_mut().place_piece(
-                            &PIECE_SHAPES[piece],
+                            &ui_state.current_shapes[piece],
                             &ui_state.current_color,
                             x,
                             y,
@@ -266,11 +275,25 @@ pub fn draw_board(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiState
                     }
                 }
 
-                let overlay = simulator.overlay_board_mut();
                 if ui.hovered() {
                     if let Some(piece) = ui_state.selected_piece {
+                        let can_place = simulator.board().can_place_piece(
+                            &SHAPES_BY_ROTATION.get(&ui_state.current_rotation).unwrap()[piece],
+                            &ui_state.current_color,
+                            x as isize,
+                            y as isize,
+                        );
+
+                        let overlay = simulator.overlay_board_mut();
                         overlay.reset();
-                        overlay.place_piece(&PIECE_SHAPES[piece], &ui_state.current_color, x, y);
+                        if can_place {
+                            overlay.place_piece(
+                                &ui_state.current_shapes[piece],
+                                &ui_state.current_color,
+                                x,
+                                y,
+                            );
+                        }
                         simulator.place_open_corner_overlay();
                     }
                 }

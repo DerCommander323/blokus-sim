@@ -107,10 +107,13 @@ impl Player {
     }
 
     pub fn place_next_piece(&mut self, board: &mut GameBoard) {
-        let PlacedPiece { piece, shape, x, y } =
-            self.algorithm
-                .get_next_piece(&self.placed_pieces, &mut self.open_corners, board);
-        board.place_piece(&shape, &self.color, x, y);
+        let PlacedPiece { piece, shape, x, y } = self.algorithm.get_next_piece(
+            &self.placed_pieces,
+            &mut self.open_corners,
+            &self.color,
+            board,
+        );
+        board.place_special_piece(&shape, &self.color, x, y);
         self.placed_pieces.push(piece);
     }
 }
