@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex, RwLock};
+
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -5,13 +7,15 @@ use crate::{
     game::{
         algorithms::{Algorithm, Algorithms, random::RandomAlgorithm},
         board::GameBoard,
-        pieces::{Colors, Pieces, PlacedPiece, Shape},
+        pieces::{Colors, Pieces, PlacedPiece},
+        statistics::Statistics,
     },
 };
 
 pub struct Simulator {
     board: GameBoard,
     overlay_board: GameBoard,
+    rng: fastrand::Rng,
     player_blue: Player,
     player_green: Player,
     player_red: Player,
@@ -20,10 +24,11 @@ pub struct Simulator {
 }
 
 impl Simulator {
-    pub fn new() -> Self {
+    pub fn new(rng: fastrand::Rng) -> Self {
         Self {
             board: GameBoard::new(),
             overlay_board: GameBoard::new(),
+            rng,
             player_blue: Player::new(Colors::Blue, (0, 0)),
             player_green: Player::new(Colors::Green, (0, 19)),
             player_red: Player::new(Colors::Red, (19, 19)),
@@ -32,25 +37,73 @@ impl Simulator {
         }
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self, statistics: &Arc<Mutex<Statistics>>) {
         match self.current_turn {
             Colors::Blue => {
-                self.player_blue.place_next_piece(&mut self.board);
+                self.player_blue
+                    .place_next_piece(&mut self.board, &mut self.rng);
                 self.current_turn = Colors::Yellow
             }
             Colors::Yellow => {
-                self.player_yellow.place_next_piece(&mut self.board);
+                self.player_yellow
+                    .place_next_piece(&mut self.board, &mut self.rng);
                 self.current_turn = Colors::Red
             }
             Colors::Red => {
-                self.player_red.place_next_piece(&mut self.board);
+                self.player_red
+                    .place_next_piece(&mut self.board, &mut self.rng);
                 self.current_turn = Colors::Green
             }
             Colors::Green => {
-                self.player_green.place_next_piece(&mut self.board);
+                self.player_green
+                    .place_next_piece(&mut self.board, &mut self.rng);
                 self.current_turn = Colors::Blue
             }
         };
+        if self.player_blue.is_finished
+            && self.player_yellow.is_finished
+            && self.player_red.is_finished
+            && self.player_green.is_finished
+        {
+            self.end_game(statistics);
+            self.reset();
+        }
+    }
+
+    pub fn end_game(&self, statistics: &Arc<Mutex<Statistics>>) {
+        let mut all_players = [
+            (&self.player_blue, self.player_blue.calculate_score()),
+            (&self.player_yellow, self.player_yellow.calculate_score()),
+            (&self.player_red, self.player_red.calculate_score()),
+            (&self.player_green, self.player_green.calculate_score()),
+        ];
+
+        all_players.sort_by(|(_, score_a), (_, score_b)| score_a.cmp(score_b));
+
+        let (winner, _winning_score) = all_players[3];
+
+        let mut stat_lock = statistics.lock().unwrap();
+        stat_lock.finished_games += 1;
+
+        match winner.color {
+            Colors::Blue => {
+                stat_lock.amount_wins.blue += 1;
+            }
+            Colors::Yellow => {
+                stat_lock.amount_wins.yellow += 1;
+            }
+            Colors::Red => {
+                stat_lock.amount_wins.red += 1;
+            }
+            Colors::Green => {
+                stat_lock.amount_wins.green += 1;
+            }
+        }
+    }
+
+    pub fn reset(&mut self) {
+        let new_rng = self.rng.fork();
+        *self = Self::new(new_rng);
     }
 
     pub fn place_open_corner_overlay(&mut self) {
@@ -94,6 +147,7 @@ pub struct Player {
     pub placed_pieces: Vec<Pieces>,
     pub open_corners: Vec<(i32, i32)>,
     pub algorithm: Algorithms,
+    pub is_finished: bool,
 }
 
 impl Player {
@@ -104,6 +158,7 @@ impl Player {
             placed_pieces: Vec::new(),
             open_corners: vec![starting_position],
             algorithm: RandomAlgorithm::new(),
+            is_finished: false,
         }
     }
 
@@ -111,7 +166,35 @@ impl Player {
         &self.open_corners
     }
 
-    pub fn place_next_piece(&mut self, board: &mut GameBoard) {
+    pub fn calculate_score(&self) -> i32 {
+        debug_assert!(
+            self.is_finished,
+            "Player {} was not finished when calculating score!",
+            self.color
+        );
+
+        let mut score = 0;
+
+        if self.available_pieces.is_empty() {
+            score += 15;
+            if *self.placed_pieces.last().unwrap() == Pieces::Single1 {
+                score += 20;
+            }
+        } else {
+            for piece in &self.available_pieces {
+                score -= piece.count_squares();
+            }
+        }
+
+        if score > 15 {
+            dbg!(&self.available_pieces, score);
+            std::thread::sleep(std::time::Duration::from_secs(10));
+        }
+
+        score
+    }
+
+    pub fn place_next_piece(&mut self, board: &mut GameBoard, rng: &mut fastrand::Rng) {
         let Some(PlacedPiece {
             piece,
             shape,
@@ -124,12 +207,14 @@ impl Player {
             &mut self.open_corners,
             &self.color,
             board,
+            rng,
         )
         else {
+            self.is_finished = true;
             return;
         };
 
-        println!("Placing {}", piece.to_string());
+        // println!("Placing {}", piece.to_string());
         board.place_special_piece(&shape, &self.color, x, y);
         self.open_corners
             .extract_if(.., |crnr| *crnr == used_corner)

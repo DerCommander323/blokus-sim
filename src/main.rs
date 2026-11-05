@@ -1,8 +1,10 @@
 pub mod game;
 
+use std::sync::{Arc, Mutex};
+
 use ply_engine::{
     layout::{Padding, Sizing},
-    prelude::*,
+    prelude::{miniquad::TextureAccess::Static, *},
 };
 use strum::IntoEnumIterator;
 
@@ -10,6 +12,7 @@ use crate::game::{
     board::Square,
     pieces::{self, PIECE_SHAPES, Rotation, SHAPES_BY_ROTATION, Shape},
     simulator::Simulator,
+    statistics::{self, Statistics},
 };
 
 fn window_conf() -> macroquad::conf::Conf {
@@ -46,7 +49,7 @@ async fn main() {
     static DEFAULT_FONT: FontAsset = font!("assets/fonts/inter.ttf");
     let mut ply = Ply::new(&DEFAULT_FONT).await;
 
-    let mut simulator = Simulator::new();
+    let mut simulator = Simulator::new(fastrand::Rng::with_seed(12345));
     let mut ui_state = UiState {
         selected_piece: None,
         display_special_shapes: false,
@@ -57,6 +60,8 @@ async fn main() {
     };
 
     simulator.place_open_corner_overlay();
+
+    let statistics = Arc::new(Mutex::new(Statistics::new()));
 
     loop {
         clear_background(BLACK);
@@ -74,7 +79,7 @@ async fn main() {
             .layout(|l| l.direction(LayoutDirection::LeftToRight))
             .children(|ui| {
                 draw_pieces(ui, &mut simulator, &mut ui_state);
-                draw_controls(ui, &mut simulator, &mut ui_state);
+                draw_controls(ui, &mut simulator, &mut ui_state, &statistics);
 
                 draw_board(ui, &mut simulator, &mut ui_state);
             });
@@ -172,7 +177,12 @@ pub fn draw_pieces(ui: &mut Ui, _simulator: &mut Simulator, ui_state: &mut UiSta
         });
 }
 
-pub fn draw_controls(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiState) {
+pub fn draw_controls(
+    ui: &mut Ui,
+    simulator: &mut Simulator,
+    ui_state: &mut UiState,
+    statistics: &Arc<Mutex<Statistics>>,
+) {
     ui.element()
         .width(fixed!(150.))
         .height(percent!(1.0))
@@ -230,6 +240,10 @@ pub fn draw_controls(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiSt
                 });
                 if ui.just_pressed() {
                     ui_state.overlay_enabled = !ui_state.overlay_enabled;
+                    if ui_state.overlay_enabled {
+                        simulator.overlay_board_mut().reset();
+                        simulator.place_open_corner_overlay();
+                    }
                 }
             });
             button(ui, fixed!(100.), fixed!(50.), |ui| {
@@ -237,9 +251,42 @@ pub fn draw_controls(ui: &mut Ui, simulator: &mut Simulator, ui_state: &mut UiSt
                     t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
                 });
                 if ui.just_pressed() {
-                    simulator.step();
-                    simulator.overlay_board_mut().reset();
-                    simulator.place_open_corner_overlay();
+                    simulator.step(statistics);
+                    if ui_state.overlay_enabled {
+                        simulator.overlay_board_mut().reset();
+                        simulator.place_open_corner_overlay();
+                    }
+                }
+            });
+            button(ui, fixed!(100.), fixed!(50.), |ui| {
+                ui.text("Run Simulator 5x per frame", |t| {
+                    t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
+                });
+                if ui.pressed() {
+                    for _ in 0..5 {
+                        simulator.step(statistics);
+                    }
+                    if ui_state.overlay_enabled {
+                        simulator.overlay_board_mut().reset();
+                        simulator.place_open_corner_overlay();
+                    }
+                }
+                if is_mouse_button_down(MouseButton::Right) {
+                    for _ in 0..2000 {
+                        simulator.step(statistics);
+                    }
+                    if ui_state.overlay_enabled {
+                        simulator.overlay_board_mut().reset();
+                        simulator.place_open_corner_overlay();
+                    }
+                }
+            });
+            button(ui, fixed!(100.), fixed!(50.), |ui| {
+                ui.text("Print statistics", |t| {
+                    t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
+                });
+                if ui.just_pressed() {
+                    statistics.lock().unwrap().print();
                 }
             });
         });

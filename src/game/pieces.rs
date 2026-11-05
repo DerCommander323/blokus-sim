@@ -135,6 +135,19 @@ impl Pieces {
         self.clone() as usize
     }
 
+    pub fn count_squares(&self) -> i32 {
+        use Pieces::*;
+
+        match self {
+            Single1 => 1,
+            Bar2 => 2,
+            Bar3 | Corner3 => 3,
+            Bar4 | L4 | T4 | Square4 | Z4 => 4,
+            Bar5 | L5 | Z5 | P5 | Bracket5 | WeirdBar5 | T5 | Corner5 | W5 | LongS5 | Thingy5
+            | Plus5 => 5,
+        }
+    }
+
     pub fn get_all_rotations(&self) -> [SpecialShape; 8] {
         let mut shape = PIECE_SPECIAL_SHAPES[self.get_id() - 1].clone();
 

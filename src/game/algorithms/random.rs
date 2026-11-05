@@ -1,6 +1,3 @@
-use ply_engine::prelude::rand::ChooseRandom;
-use strum::IntoEnumIterator;
-
 use crate::game::{
     algorithms::{Algorithm, Algorithms},
     board::GameBoard,
@@ -8,15 +5,11 @@ use crate::game::{
 };
 
 #[derive(Debug)]
-pub struct RandomAlgorithm {
-    available_pieces: Vec<Pieces>,
-}
+pub struct RandomAlgorithm {}
 
 impl RandomAlgorithm {
     pub fn new() -> Algorithms {
-        Algorithms::Random(RandomAlgorithm {
-            available_pieces: Pieces::iter().collect(),
-        })
+        Algorithms::Random(RandomAlgorithm {})
     }
 }
 
@@ -24,15 +17,16 @@ impl Algorithm for RandomAlgorithm {
     fn get_next_piece(
         &mut self,
         available_pieces: &mut Vec<Pieces>,
-        placed_pieces: &Vec<Pieces>,
+        _placed_pieces: &Vec<Pieces>,
         open_corners: &mut Vec<(i32, i32)>,
         color: &Colors,
         board: &mut GameBoard,
+        rng: &mut fastrand::Rng,
     ) -> Option<PlacedPiece> {
         // Select a random piece, a random open corner and a random rotation for the piece and try until the piece fits
 
-        fastrand::shuffle(available_pieces);
-        fastrand::shuffle(open_corners);
+        rng.shuffle(available_pieces);
+        rng.shuffle(open_corners);
 
         for piece in available_pieces {
             for outer_corner in &*open_corners {
@@ -55,7 +49,7 @@ impl Algorithm for RandomAlgorithm {
             }
         }
 
-        println!("{color} is out of pieces",);
+        // println!("{color} is out of pieces",);
         None
     }
 }

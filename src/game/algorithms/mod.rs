@@ -1,7 +1,6 @@
 use crate::game::{
     board::GameBoard,
-    pieces::{Colors, Pieces, PlacedPiece, Shape},
-    simulator::Player,
+    pieces::{Colors, Pieces, PlacedPiece},
 };
 
 pub mod random;
@@ -21,5 +20,6 @@ pub trait Algorithm {
         open_corners: &mut Vec<(i32, i32)>,
         color: &Colors,
         board: &mut GameBoard,
+        rng: &mut fastrand::Rng,
     ) -> Option<PlacedPiece>;
 }
