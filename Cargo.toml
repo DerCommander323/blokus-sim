@@ -8,3 +8,8 @@ enum_dispatch = "0.3.13"
 fastrand = "2.5.0"
 ply-engine = { git = "https://github.com/TheRedDeveloper/ply-engine.git", rev = "52be132" }
 strum = { version = "0.28.0", features = ["derive"] }
+tracy-client = "0.19.0"
+
+[features]
+default = []
+tracy = []

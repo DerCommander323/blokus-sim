@@ -309,8 +309,7 @@ impl Shape {
         let mut walking_index = 0;
         for dx in 0..self.width as usize {
             for dy in 0..self.height as usize {
-                let temp = count - ((dy + 1) * self.width as usize);
-                let original_index = temp + dx;
+                let original_index = count - (dy + 1) * self.width as usize + dx;
 
                 self.map[walking_index] = original_map[original_index];
 

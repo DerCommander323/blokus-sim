@@ -44,13 +44,22 @@ impl GameBoard {
     }
 
     pub fn can_place_piece(&self, shape: &SpecialShape, color: &Colors, x: i32, y: i32) -> bool {
+        #[cfg(feature = "tracy")]
+        let _zone = tracy_client::span!("piece placement check");
+
+        #[cfg(feature = "tracy")]
+        let _zone2 = tracy_client::span!("inbounds check");
         // 22 because the SpecialShapes are extended by 2 in both directions
         if x <= -2 || x + shape.width > 22 || y <= -2 || y + shape.height > 22 {
             return false;
         }
+        #[cfg(feature = "tracy")]
+        drop(_zone2);
 
         let mut ret = false;
 
+        #[cfg(feature = "tracy")]
+        let _zone2 = tracy_client::span!("square check");
         for dx in 0..shape.width {
             for dy in 0..shape.height {
                 let board_x = dx + x;

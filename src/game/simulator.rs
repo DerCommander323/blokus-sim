@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 
 use strum::IntoEnumIterator;
 
@@ -37,7 +37,70 @@ impl Simulator {
         }
     }
 
+    pub fn run_full(&mut self, statistics: &Arc<Mutex<Statistics>>) {
+        let thread_count = std::thread::available_parallelism().unwrap().get() - 1;
+        println!("Running simulations on {thread_count} threads");
+
+        for i in 0..thread_count {
+            let stat_clone = statistics.clone();
+
+            std::thread::Builder::new()
+                .name(format!("sim thread {i}"))
+                .spawn(move || {
+                    let mut simulator = Simulator::new(fastrand::Rng::with_seed(i as u64));
+
+                    loop {
+                        simulator.step(&stat_clone);
+
+                        #[cfg(feature = "tracy")]
+                        tracy_client::frame_mark();
+                    }
+                })
+                .unwrap();
+        }
+
+        let stat_clone = statistics.clone();
+        let target_games = 1_000_000;
+
+        std::thread::Builder::new()
+            .name("Sim watcher thread".to_string())
+            .spawn(move || {
+                let mut gps_accumulated = Vec::new();
+
+                loop {
+                    let prev_games = stat_clone.lock().unwrap().finished_games;
+
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+
+                    let new_games = stat_clone.lock().unwrap().finished_games;
+                    let delta = new_games - prev_games;
+                    println!("Finished {} games per second", delta);
+
+                    gps_accumulated.push(delta);
+                    let average =
+                        gps_accumulated.iter().sum::<i32>() as f64 / gps_accumulated.len() as f64;
+                    println!("Average gps: {average:.1}");
+
+                    let percentage = new_games as f64 / target_games as f64;
+                    println!(
+                        "{new_games} out of {target_games} finished: {:.1}% complete",
+                        percentage * 100.
+                    );
+
+                    if new_games > target_games {
+                        println!("Finished running {new_games} games, exiting...");
+                        stat_clone.lock().unwrap().print();
+                        break;
+                    }
+                }
+            })
+            .unwrap();
+    }
+
     pub fn step(&mut self, statistics: &Arc<Mutex<Statistics>>) {
+        #[cfg(feature = "tracy")]
+        let _zone = tracy_client::span!("Simulator step");
+
         match self.current_turn {
             Colors::Blue => {
                 self.player_blue
@@ -186,15 +249,18 @@ impl Player {
             }
         }
 
-        if score > 15 {
-            dbg!(&self.available_pieces, score);
-            std::thread::sleep(std::time::Duration::from_secs(10));
-        }
+        // if score > 15 {
+        //     dbg!(&self.available_pieces, score);
+        //     std::thread::sleep(std::time::Duration::from_secs(10));
+        // }
 
         score
     }
 
     pub fn place_next_piece(&mut self, board: &mut GameBoard, rng: &mut fastrand::Rng) {
+        #[cfg(feature = "tracy")]
+        let _zone = tracy_client::span!("player step");
+
         let Some(PlacedPiece {
             piece,
             shape,
@@ -213,6 +279,9 @@ impl Player {
             self.is_finished = true;
             return;
         };
+
+        #[cfg(feature = "tracy")]
+        let _zone2 = tracy_client::span!("piece placement");
 
         // println!("Placing {}", piece.to_string());
         board.place_special_piece(&shape, &self.color, x, y);

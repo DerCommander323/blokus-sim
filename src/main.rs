@@ -4,15 +4,16 @@ use std::sync::{Arc, Mutex};
 
 use ply_engine::{
     layout::{Padding, Sizing},
-    prelude::{miniquad::TextureAccess::Static, *},
+    prelude::*,
 };
 use strum::IntoEnumIterator;
+use tracy_client::Client;
 
 use crate::game::{
     board::Square,
     pieces::{self, PIECE_SHAPES, Rotation, SHAPES_BY_ROTATION, Shape},
     simulator::Simulator,
-    statistics::{self, Statistics},
+    statistics::Statistics,
 };
 
 fn window_conf() -> macroquad::conf::Conf {
@@ -46,6 +47,9 @@ pub struct UiState {
 
 #[macroquad::main(window_conf)]
 async fn main() {
+    #[cfg(feature = "tracy")]
+    let _tracy = Client::start();
+
     static DEFAULT_FONT: FontAsset = font!("assets/fonts/inter.ttf");
     let mut ply = Ply::new(&DEFAULT_FONT).await;
 
@@ -279,6 +283,14 @@ pub fn draw_controls(
                         simulator.overlay_board_mut().reset();
                         simulator.place_open_corner_overlay();
                     }
+                }
+            });
+            button(ui, fixed!(100.), fixed!(50.), |ui| {
+                ui.text("Run full simulator", |t| {
+                    t.font_size(16).color(0xEEEEEEE).alignment(CenterX)
+                });
+                if ui.just_pressed() {
+                    simulator.run_full(statistics);
                 }
             });
             button(ui, fixed!(100.), fixed!(50.), |ui| {
