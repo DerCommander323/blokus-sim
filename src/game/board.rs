@@ -43,6 +43,26 @@ impl GameBoard {
         self.squares[x as usize][y as usize] = square;
     }
 
+    pub fn is_corner_valid(&self, corner: (i32, i32), color: &Colors) -> bool {
+        let (x, y) = corner;
+        // If it is not in bounds or the board is not empty there, it's invalid
+        if !bounds_check(x, y) || self.get_square(x, y) != &Square::Empty {
+            return false;
+        }
+
+        let neighbours = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)];
+
+        if neighbours
+            .into_iter()
+            // If the neighbour is in bounds and is the same color as the planned outer corner, it's invalid
+            .any(|(nx, ny)| bounds_check(nx, ny) && self.get_square(nx, ny) == &color.to_square())
+        {
+            return false;
+        }
+
+        true
+    }
+
     pub fn can_place_piece(&self, shape: &SpecialShape, color: &Colors, x: i32, y: i32) -> bool {
         #[cfg(feature = "tracy")]
         let _zone = tracy_client::span!("piece placement check");

@@ -325,13 +325,15 @@ impl Player {
         // println!("Placing {}", piece.to_string());
         board.place_special_piece(&shape, &self.color, x, y);
         self.open_corners
-            .extract_if(.., |crnr| *crnr == used_corner)
+            .extract_if(.., |crnr| {
+                *crnr == used_corner || !board.is_corner_valid(*crnr, &self.color)
+            })
             .for_each(drop);
         for new_corner in shape.outer_corners.iter() {
             let nx = new_corner.0 + x;
             let ny = new_corner.1 + y;
 
-            if bounds_check(nx, ny) {
+            if board.is_corner_valid((nx, ny), &self.color) {
                 self.open_corners.push((nx, ny));
             }
         }
