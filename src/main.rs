@@ -7,7 +7,6 @@ use ply_engine::{
     prelude::*,
 };
 use strum::IntoEnumIterator;
-use tracy_client::Client;
 
 use crate::game::{
     board::Square,
@@ -48,7 +47,7 @@ pub struct UiState {
 #[macroquad::main(window_conf)]
 async fn main() {
     #[cfg(feature = "tracy")]
-    let _tracy = Client::start();
+    let _tracy = tracy_client::Client::start();
 
     static DEFAULT_FONT: FontAsset = font!("assets/fonts/inter.ttf");
     let mut ply = Ply::new(&DEFAULT_FONT).await;

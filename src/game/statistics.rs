@@ -22,5 +22,23 @@ impl Statistics {
 
     pub fn print(&self) {
         println!("{:#?}", self);
+
+        println!("Win rates:");
+        println!(
+            " -   Blue: {:.2}%",
+            self.amount_wins.blue as f64 / self.finished_games as f64 * 100.
+        );
+        println!(
+            " - Yellow: {:.2}%",
+            self.amount_wins.yellow as f64 / self.finished_games as f64 * 100.
+        );
+        println!(
+            " -    Red: {:.2}%",
+            self.amount_wins.red as f64 / self.finished_games as f64 * 100.
+        );
+        println!(
+            " -  Green: {:.2}%",
+            self.amount_wins.green as f64 / self.finished_games as f64 * 100.
+        );
     }
 }

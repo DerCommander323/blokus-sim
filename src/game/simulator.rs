@@ -41,6 +41,8 @@ impl Simulator {
         let thread_count = std::thread::available_parallelism().unwrap().get() - 1;
         println!("Running simulations on {thread_count} threads");
 
+        let start_time = std::time::Instant::now();
+
         for i in 0..thread_count {
             let stat_clone = statistics.clone();
 
@@ -88,8 +90,15 @@ impl Simulator {
                     );
 
                     if new_games > target_games {
-                        println!("Finished running {new_games} games, exiting...");
+                        let now = std::time::Instant::now();
+                        let total_time = now - start_time;
+                        println!(
+                            "Finished running {new_games} games in {:.1?}, exiting...",
+                            total_time
+                        );
+
                         stat_clone.lock().unwrap().print();
+
                         break;
                     }
                 }
