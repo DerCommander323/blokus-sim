@@ -497,9 +497,9 @@ impl Colors {
     }
 }
 
-pub struct PlacedPiece {
+pub struct PlacedPiece<'a> {
     pub piece: Pieces,
-    pub shape: SpecialShape,
+    pub shape: &'a SpecialShape,
     pub used_corner: (i32, i32),
     pub x: i32,
     pub y: i32,

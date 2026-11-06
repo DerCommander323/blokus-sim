@@ -49,10 +49,21 @@ async fn main() {
     #[cfg(feature = "tracy")]
     let _tracy = tracy_client::Client::start();
 
+    let mut args = std::env::args();
+    let mut simulator = Simulator::new(fastrand::Rng::with_seed(12345));
+    let statistics = Arc::new(Mutex::new(Statistics::new()));
+
+    if args.any(|arg| arg.contains("noui")) {
+        let handle = simulator.run_full(&statistics);
+
+        handle.join().unwrap();
+
+        return;
+    }
+
     static DEFAULT_FONT: FontAsset = font!("assets/fonts/inter.ttf");
     let mut ply = Ply::new(&DEFAULT_FONT).await;
 
-    let mut simulator = Simulator::new(fastrand::Rng::with_seed(12345));
     let mut ui_state = UiState {
         selected_piece: None,
         display_special_shapes: false,
@@ -63,8 +74,6 @@ async fn main() {
     };
 
     simulator.place_open_corner_overlay();
-
-    let statistics = Arc::new(Mutex::new(Statistics::new()));
 
     loop {
         clear_background(BLACK);

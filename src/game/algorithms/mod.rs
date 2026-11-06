@@ -13,7 +13,7 @@ pub enum Algorithms {
 
 #[enum_dispatch::enum_dispatch]
 pub trait Algorithm {
-    fn get_next_piece(
+    fn get_next_piece<'a>(
         &mut self,
         available_pieces: &mut Vec<Pieces>,
         placed_pieces: &Vec<Pieces>,
@@ -21,5 +21,7 @@ pub trait Algorithm {
         color: &Colors,
         board: &mut GameBoard,
         rng: &mut fastrand::Rng,
-    ) -> Option<PlacedPiece>;
+    ) -> Option<PlacedPiece<'a>>;
+
+    fn reset(&mut self);
 }

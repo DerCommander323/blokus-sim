@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    thread::JoinHandle,
+};
 
 use strum::IntoEnumIterator;
 
@@ -17,9 +20,9 @@ pub struct Simulator {
     overlay_board: GameBoard,
     rng: fastrand::Rng,
     player_blue: Player,
-    player_green: Player,
-    player_red: Player,
     player_yellow: Player,
+    player_red: Player,
+    player_green: Player,
     current_turn: Colors,
 }
 
@@ -30,14 +33,14 @@ impl Simulator {
             overlay_board: GameBoard::new(),
             rng,
             player_blue: Player::new(Colors::Blue, (0, 0)),
-            player_green: Player::new(Colors::Green, (0, 19)),
-            player_red: Player::new(Colors::Red, (19, 19)),
             player_yellow: Player::new(Colors::Yellow, (19, 0)),
+            player_red: Player::new(Colors::Red, (19, 19)),
+            player_green: Player::new(Colors::Green, (0, 19)),
             current_turn: Colors::Blue,
         }
     }
 
-    pub fn run_full(&mut self, statistics: &Arc<Mutex<Statistics>>) {
+    pub fn run_full(&mut self, statistics: &Arc<Mutex<Statistics>>) -> JoinHandle<()> {
         let thread_count = std::thread::available_parallelism().unwrap().get() - 1;
         println!("Running simulations on {thread_count} threads");
 
@@ -103,7 +106,7 @@ impl Simulator {
                     }
                 }
             })
-            .unwrap();
+            .unwrap()
     }
 
     pub fn step(&mut self, statistics: &Arc<Mutex<Statistics>>) {
@@ -132,6 +135,12 @@ impl Simulator {
                 self.current_turn = Colors::Blue
             }
         };
+
+        #[cfg(feature = "tracy")]
+        drop(_zone);
+        #[cfg(feature = "tracy")]
+        let _zone = tracy_client::span!("Game reset");
+
         if self.player_blue.is_finished
             && self.player_yellow.is_finished
             && self.player_red.is_finished
@@ -175,7 +184,16 @@ impl Simulator {
 
     pub fn reset(&mut self) {
         let new_rng = self.rng.fork();
-        *self = Self::new(new_rng);
+
+        self.rng = new_rng;
+        self.current_turn = Colors::Blue;
+
+        self.player_blue.reset((0, 0));
+        self.player_yellow.reset((19, 0));
+        self.player_red.reset((19, 19));
+        self.player_green.reset((0, 19));
+        self.board.reset();
+        self.overlay_board.reset();
     }
 
     pub fn place_open_corner_overlay(&mut self) {
@@ -232,6 +250,18 @@ impl Player {
             algorithm: RandomAlgorithm::new(),
             is_finished: false,
         }
+    }
+
+    pub fn reset(&mut self, starting_position: (i32, i32)) {
+        self.available_pieces.clear();
+        for piece in Pieces::iter() {
+            self.available_pieces.push(piece);
+        }
+        self.placed_pieces.clear();
+        self.open_corners.clear();
+        self.open_corners.push(starting_position);
+        self.algorithm.reset();
+        self.is_finished = false;
     }
 
     pub fn get_open_corners(&self) -> &Vec<(i32, i32)> {
@@ -297,7 +327,7 @@ impl Player {
         self.open_corners
             .extract_if(.., |crnr| *crnr == used_corner)
             .for_each(drop);
-        for new_corner in shape.outer_corners {
+        for new_corner in shape.outer_corners.iter() {
             let nx = new_corner.0 + x;
             let ny = new_corner.1 + y;
 
@@ -306,8 +336,8 @@ impl Player {
             }
         }
         self.available_pieces
-            .extract_if(.., |pc| *pc == piece)
+            .extract_if(.., |pc| pc == &piece)
             .for_each(drop);
-        self.placed_pieces.push(piece);
+        self.placed_pieces.push(piece.clone());
     }
 }

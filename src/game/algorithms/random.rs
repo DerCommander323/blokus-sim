@@ -14,7 +14,7 @@ impl RandomAlgorithm {
 }
 
 impl Algorithm for RandomAlgorithm {
-    fn get_next_piece(
+    fn get_next_piece<'a>(
         &mut self,
         available_pieces: &mut Vec<Pieces>,
         _placed_pieces: &Vec<Pieces>,
@@ -22,7 +22,7 @@ impl Algorithm for RandomAlgorithm {
         color: &Colors,
         board: &mut GameBoard,
         rng: &mut fastrand::Rng,
-    ) -> Option<PlacedPiece> {
+    ) -> Option<PlacedPiece<'a>> {
         // Select a random piece, a random open corner and a random rotation for the piece and try until the piece fits
         #[cfg(feature = "tracy")]
         let _zone = tracy_client::span!("RandomAlgorithm step");
@@ -45,7 +45,7 @@ impl Algorithm for RandomAlgorithm {
             #[cfg(feature = "tracy")]
             _zone4.emit_value(open_corners.len() as u64);
 
-            for outer_corner in &*open_corners {
+            for outer_corner in open_corners.iter() {
                 let variations = SPECIAL_SHAPES_BY_PIECE.get(piece).unwrap();
 
                 #[cfg(feature = "tracy")]
@@ -69,7 +69,7 @@ impl Algorithm for RandomAlgorithm {
                         if board.can_place_piece(&shape, color, x, y) {
                             return Some(PlacedPiece {
                                 piece: piece.clone(),
-                                shape: shape.clone(),
+                                shape: shape,
                                 used_corner: *outer_corner,
                                 x: x,
                                 y: y,
@@ -91,4 +91,6 @@ impl Algorithm for RandomAlgorithm {
         // println!("{color} is out of pieces",);
         None
     }
+
+    fn reset(&mut self) {}
 }
