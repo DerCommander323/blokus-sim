@@ -7,7 +7,8 @@ use strum::IntoEnumIterator;
 
 use crate::game::{
     algorithms::{
-        Algorithm, Algorithms, largest_first::LargestFirstAlgorithm, random::RandomAlgorithm,
+        Algorithm, Algorithms, barasona_opening::BarasonaOpeningAlgorithm,
+        largest_first::LargestFirstAlgorithm, random::RandomAlgorithm,
     },
     board::GameBoard,
     pieces::{Colors, Pieces, PlacedPiece},
@@ -32,7 +33,7 @@ impl Simulator {
             board: GameBoard::new(),
             overlay_board: GameBoard::new(),
             rng,
-            player_blue: Player::new(Colors::Blue, (0, 0), LargestFirstAlgorithm::new()),
+            player_blue: Player::new(Colors::Blue, (0, 0), BarasonaOpeningAlgorithm::new()),
             player_yellow: Player::new(Colors::Yellow, (19, 0), LargestFirstAlgorithm::new()),
             player_red: Player::new(Colors::Red, (19, 19), LargestFirstAlgorithm::new()),
             player_green: Player::new(Colors::Green, (0, 19), LargestFirstAlgorithm::new()),
@@ -74,7 +75,7 @@ impl Simulator {
         }
 
         let stat_clone = statistics.clone();
-        let target_games = 0_500_000;
+        let target_games = 10_500_000;
 
         std::thread::Builder::new()
             .name("Sim watcher thread".to_string())

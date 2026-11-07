@@ -3,6 +3,7 @@ use crate::game::{
     pieces::{Colors, Pieces, PlacedPiece},
 };
 
+pub mod barasona_opening;
 pub mod largest_first;
 pub mod random;
 
@@ -11,6 +12,7 @@ pub mod random;
 pub enum Algorithms {
     Random(random::RandomAlgorithm),
     LargestFirst(largest_first::LargestFirstAlgorithm),
+    BarasonaOpening(barasona_opening::BarasonaOpeningAlgorithm),
 }
 
 #[enum_dispatch::enum_dispatch]
