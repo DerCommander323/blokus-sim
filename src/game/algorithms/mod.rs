@@ -10,6 +10,7 @@ pub mod random;
 #[enum_dispatch::enum_dispatch(Algorithm)]
 pub enum Algorithms {
     Random(random::RandomAlgorithm),
+    LargestFirst(largest_first::LargestFirstAlgorithm),
 }
 
 #[enum_dispatch::enum_dispatch]
