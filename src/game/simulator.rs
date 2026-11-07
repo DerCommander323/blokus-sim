@@ -5,14 +5,11 @@ use std::{
 
 use strum::IntoEnumIterator;
 
-use crate::{
-    bounds_check,
-    game::{
-        algorithms::{Algorithm, Algorithms, random::RandomAlgorithm},
-        board::GameBoard,
-        pieces::{Colors, Pieces, PlacedPiece},
-        statistics::Statistics,
-    },
+use crate::game::{
+    algorithms::{Algorithm, Algorithms, random::RandomAlgorithm},
+    board::GameBoard,
+    pieces::{Colors, Pieces, PlacedPiece},
+    statistics::Statistics,
 };
 
 pub struct Simulator {
@@ -27,8 +24,9 @@ pub struct Simulator {
 }
 
 impl Simulator {
-    pub fn new(rng: fastrand::Rng) -> Self {
+    pub fn new(mut rng: fastrand::Rng) -> Self {
         Self {
+            current_turn: Self::get_random_starting_player(&mut rng),
             board: GameBoard::new(),
             overlay_board: GameBoard::new(),
             rng,
@@ -36,7 +34,16 @@ impl Simulator {
             player_yellow: Player::new(Colors::Yellow, (19, 0)),
             player_red: Player::new(Colors::Red, (19, 19)),
             player_green: Player::new(Colors::Green, (0, 19)),
-            current_turn: Colors::Blue,
+        }
+    }
+
+    pub fn get_random_starting_player(rng: &mut fastrand::Rng) -> Colors {
+        match rng.i32(0..4) {
+            0 => Colors::Blue,
+            1 => Colors::Yellow,
+            2 => Colors::Red,
+            3 => Colors::Green,
+            _ => panic!(),
         }
     }
 
@@ -52,7 +59,7 @@ impl Simulator {
             std::thread::Builder::new()
                 .name(format!("sim thread {i}"))
                 .spawn(move || {
-                    let mut simulator = Simulator::new(fastrand::Rng::with_seed(i as u64));
+                    let mut simulator = Simulator::new(fastrand::Rng::new());
 
                     loop {
                         simulator.step(&stat_clone);
@@ -65,7 +72,7 @@ impl Simulator {
         }
 
         let stat_clone = statistics.clone();
-        let target_games = 1_000_000;
+        let target_games = 10_000_000;
 
         std::thread::Builder::new()
             .name("Sim watcher thread".to_string())
@@ -161,7 +168,13 @@ impl Simulator {
 
         all_players.sort_by(|(_, score_a), (_, score_b)| score_a.cmp(score_b));
 
-        let (winner, _winning_score) = all_players[3];
+        let (winner, winning_score) = all_players[3];
+        let (_second, second_score) = all_players[2];
+
+        // Had half a mental breakdown because ties kept skewing my results...
+        if winning_score == second_score {
+            return;
+        }
 
         let mut stat_lock = statistics.lock().unwrap();
         stat_lock.finished_games += 1;
@@ -186,7 +199,7 @@ impl Simulator {
         let new_rng = self.rng.fork();
 
         self.rng = new_rng;
-        self.current_turn = Colors::Blue;
+        self.current_turn = Self::get_random_starting_player(&mut self.rng);
 
         self.player_blue.reset((0, 0));
         self.player_yellow.reset((19, 0));

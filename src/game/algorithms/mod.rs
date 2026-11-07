@@ -3,6 +3,7 @@ use crate::game::{
     pieces::{Colors, Pieces, PlacedPiece},
 };
 
+pub mod largest_first;
 pub mod random;
 
 #[derive(Debug)]
@@ -14,7 +15,7 @@ pub enum Algorithms {
 #[enum_dispatch::enum_dispatch]
 pub trait Algorithm {
     fn get_next_piece<'a>(
-        &mut self,
+        &'a mut self,
         available_pieces: &mut Vec<Pieces>,
         placed_pieces: &Vec<Pieces>,
         open_corners: &mut Vec<(i32, i32)>,

@@ -5,10 +5,10 @@ use crate::{
 };
 
 pub struct GameBoard {
-    squares: [[Square; 20]; 20],
+    squares: [Square; 400],
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum Square {
     #[default]
     Empty,
@@ -18,10 +18,12 @@ pub enum Square {
     Green,
 }
 
+const EMPTY_BOARD: [Square; 400] = [Square::Empty; 400];
+
 impl GameBoard {
     pub fn new() -> Self {
         Self {
-            squares: Default::default(),
+            squares: EMPTY_BOARD,
         }
     }
 
@@ -29,18 +31,20 @@ impl GameBoard {
         *self = Self::new()
     }
 
-    pub fn get_squares(&self) -> &[[Square; 20]; 20] {
+    pub fn get_squares(&self) -> &[Square; 400] {
         &self.squares
     }
 
     pub fn get_square(&self, x: i32, y: i32) -> &Square {
         hard_bounds_check(x, y);
-        &self.get_squares()[x as usize][y as usize]
+        let index = y * 20 + x;
+        &self.get_squares()[index as usize]
     }
 
     pub fn set_square(&mut self, x: i32, y: i32, square: Square) {
         hard_bounds_check(x, y);
-        self.squares[x as usize][y as usize] = square;
+        let index = y * 20 + x;
+        self.squares[index as usize] = square;
     }
 
     pub fn is_corner_valid(&self, corner: (i32, i32), color: &Colors) -> bool {

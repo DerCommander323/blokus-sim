@@ -469,7 +469,7 @@ impl Rotation {
     }
 }
 
-#[derive(Debug, Clone, strum::Display)]
+#[derive(Debug, Clone, strum::Display, strum::EnumIter)]
 pub enum Colors {
     Blue,
     Yellow,

@@ -1,21 +1,27 @@
+use std::collections::HashMap;
+
 use crate::game::{
     algorithms::{Algorithm, Algorithms},
     board::GameBoard,
-    pieces::{Colors, Pieces, PlacedPiece, SPECIAL_SHAPES_BY_PIECE},
+    pieces::{Colors, Pieces, PlacedPiece, SPECIAL_SHAPES_BY_PIECE, SpecialShape},
 };
 
 #[derive(Debug)]
-pub struct RandomAlgorithm {}
+pub struct RandomAlgorithm {
+    shapes_by_piece: HashMap<Pieces, Vec<SpecialShape>>,
+}
 
 impl RandomAlgorithm {
     pub fn new() -> Algorithms {
-        Algorithms::Random(RandomAlgorithm {})
+        Algorithms::Random(RandomAlgorithm {
+            shapes_by_piece: SPECIAL_SHAPES_BY_PIECE.clone(),
+        })
     }
 }
 
 impl Algorithm for RandomAlgorithm {
     fn get_next_piece<'a>(
-        &mut self,
+        &'a mut self,
         available_pieces: &mut Vec<Pieces>,
         _placed_pieces: &Vec<Pieces>,
         open_corners: &mut Vec<(i32, i32)>,
@@ -31,6 +37,12 @@ impl Algorithm for RandomAlgorithm {
         let _zone2 = tracy_client::span!("array shuffling");
         rng.shuffle(available_pieces);
         rng.shuffle(open_corners);
+        for values in self.shapes_by_piece.values_mut() {
+            rng.shuffle(values);
+            for v in values {
+                rng.shuffle(&mut v.inner_corners);
+            }
+        }
         #[cfg(feature = "tracy")]
         drop(_zone2);
 
@@ -46,7 +58,7 @@ impl Algorithm for RandomAlgorithm {
             _zone4.emit_value(open_corners.len() as u64);
 
             for outer_corner in open_corners.iter() {
-                let variations = SPECIAL_SHAPES_BY_PIECE.get(piece).unwrap();
+                let variations = self.shapes_by_piece.get(piece).unwrap();
 
                 #[cfg(feature = "tracy")]
                 let _zone5 = tracy_client::span!("variant iteration");
