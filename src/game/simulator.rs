@@ -8,7 +8,8 @@ use strum::IntoEnumIterator;
 use crate::game::{
     algorithms::{
         Algorithm, Algorithms, barasona_opening::BarasonaOpeningAlgorithm,
-        largest_first::LargestFirstAlgorithm, random::RandomAlgorithm,
+        center_priority::CenterPriorityAlgorithm, largest_first::LargestFirstAlgorithm,
+        random::RandomAlgorithm,
     },
     board::GameBoard,
     pieces::{Colors, Pieces, PlacedPiece},
@@ -33,10 +34,10 @@ impl Simulator {
             board: GameBoard::new(),
             overlay_board: GameBoard::new(),
             rng,
-            player_blue: Player::new(Colors::Blue, (0, 0), BarasonaOpeningAlgorithm::new()),
-            player_yellow: Player::new(Colors::Yellow, (19, 0), LargestFirstAlgorithm::new()),
-            player_red: Player::new(Colors::Red, (19, 19), LargestFirstAlgorithm::new()),
-            player_green: Player::new(Colors::Green, (0, 19), LargestFirstAlgorithm::new()),
+            player_blue: Player::new(Colors::Blue, (0, 0), CenterPriorityAlgorithm::new()),
+            player_yellow: Player::new(Colors::Yellow, (19, 0), BarasonaOpeningAlgorithm::new()),
+            player_red: Player::new(Colors::Red, (19, 19), BarasonaOpeningAlgorithm::new()),
+            player_green: Player::new(Colors::Green, (0, 19), BarasonaOpeningAlgorithm::new()),
         }
     }
 
